@@ -154,6 +154,7 @@ private:
 	bool usesWheelZoomGesture() const;
 	void finishWheelZoomGesture();
 	void rebuildIndependentWheelBinding();
+	void requestIndependentWheelTargetRefresh();
 	void refreshIndependentWheelTarget();
 	void resetIndependentWheelState();
 	void handleIndependentWheelKey(uint32_t key, bool down, bool repeat, const WheelZoomModifierState &modifiers);
@@ -235,6 +236,7 @@ private:
 	WheelZoomState independentWheelState;
 	std::atomic<bool> independentWheelBackendReady{false};
 	std::atomic<bool> independentWheelTargetReady{false};
+	std::atomic<bool> independentWheelTargetRefreshRequested{false};
 	std::atomic<int> independentWheelTargetX{0};
 	std::atomic<int> independentWheelTargetY{0};
 	std::atomic<int> independentWheelTargetWidth{0};

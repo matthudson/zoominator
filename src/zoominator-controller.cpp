@@ -571,8 +571,7 @@ void ZoominatorController::frontendEventCallback(enum obs_frontend_event event, 
 	}
 	if (event == OBS_FRONTEND_EVENT_FINISHED_LOADING || event == OBS_FRONTEND_EVENT_SCENE_CHANGED ||
 	    event == OBS_FRONTEND_EVENT_SCENE_COLLECTION_CHANGED || event == OBS_FRONTEND_EVENT_SCENE_LIST_CHANGED) {
-		ctl->resetIndependentWheelState();
-		QTimer::singleShot(0, ctl, [ctl]() { ctl->refreshIndependentWheelTarget(); });
+		ctl->requestIndependentWheelTargetRefresh();
 	}
 }
 
@@ -4407,6 +4406,19 @@ void ZoominatorController::resetIndependentWheelState()
 	queueIndependentWheelStatusUpdate();
 }
 
+void ZoominatorController::requestIndependentWheelTargetRefresh()
+{
+	/* OBS emits scene events synchronously while SetCurrentScene is still
+	 * updating frontend state. Keep that callback free of Qt dispatch and OBS
+	 * scene enumeration: invalidate the hook-facing snapshot immediately, then
+	 * let the existing main-thread eligibility timer perform the reset/refresh
+	 * after the scene transition has completed. */
+	independentWheelTargetReady.store(false, std::memory_order_release);
+	pendingIndependentWheelDelta.store(0, std::memory_order_release);
+	independentWheelGeneration.fetch_add(1, std::memory_order_acq_rel);
+	independentWheelTargetRefreshRequested.store(true, std::memory_order_release);
+}
+
 void ZoominatorController::rebuildIndependentWheelBinding()
 {
 	WheelZoomBinding binding;
@@ -4460,6 +4472,9 @@ void ZoominatorController::rebuildIndependentWheelBinding()
 
 void ZoominatorController::refreshIndependentWheelTarget()
 {
+	if (independentWheelTargetRefreshRequested.exchange(false, std::memory_order_acq_rel))
+		resetIndependentWheelState();
+
 	bool ready = independentWheelZoomBindingValid() && independentWheelZoomBackendAvailable() &&
 		     !screenKey.isEmpty();
 	int x = 0, y = 0, w = 0, h = 0;
