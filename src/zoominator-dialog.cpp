@@ -336,7 +336,6 @@ void ZoominatorDialog::buildUi()
 			auto *h = new QHBoxLayout(rowWheelShortcutWidget);
 			h->setContentsMargins(0, 0, 0, 0);
 			editWheelZoomShortcut = new QKeySequenceEdit(rowWheelShortcutWidget);
-			editWheelZoomShortcut->setMaximumSequenceLength(1);
 			btnClearWheelZoomShortcut = new QPushButton(T("Dialog.Clear"), rowWheelShortcutWidget);
 			h->addWidget(editWheelZoomShortcut, 1);
 			h->addWidget(btnClearWheelZoomShortcut);

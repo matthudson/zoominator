@@ -4420,7 +4420,7 @@ void ZoominatorController::rebuildIndependentWheelBinding()
 
 	if (binding.mode != WheelZoomActivationMode::HoldModifiers) {
 		QKeySequence sequence(independentWheelShortcutSequence);
-		if (!sequence.isEmpty()) {
+		if (!sequence.isEmpty() && sequence.count() == 1) {
 			const QKeyCombination combination = sequence[0];
 			const auto modifiers = combination.keyboardModifiers();
 			binding.key = (uint32_t)qtKeyToVk(int(combination.key()));
