@@ -256,11 +256,35 @@ ZoominatorController::ZoomAnchorMode ZoominatorController::zoomAnchorModeFromStr
 	return ZoomAnchorMode::CursorFollow;
 }
 
+QString ZoominatorController::wheelActivationModeToString(WheelZoomActivationMode mode)
+{
+	switch (mode) {
+	case WheelZoomActivationMode::HoldShortcut:
+		return QStringLiteral("hold_shortcut");
+	case WheelZoomActivationMode::ToggleShortcut:
+		return QStringLiteral("toggle_shortcut");
+	case WheelZoomActivationMode::HoldModifiers:
+		break;
+	}
+	return QStringLiteral("hold_modifiers");
+}
+
+WheelZoomActivationMode ZoominatorController::wheelActivationModeFromString(const QString &value)
+{
+	if (value == QLatin1String("hold_shortcut"))
+		return WheelZoomActivationMode::HoldShortcut;
+	if (value == QLatin1String("toggle_shortcut"))
+		return WheelZoomActivationMode::ToggleShortcut;
+	return WheelZoomActivationMode::HoldModifiers;
+}
+
 ZoominatorController::ZoominatorController()
 {
 	tickTimer.setInterval(16);
 	tickTimer.setTimerType(Qt::PreciseTimer);
 	connect(&tickTimer, &QTimer::timeout, this, &ZoominatorController::onTick);
+	wheelEligibilityTimer.setInterval(250);
+	connect(&wheelEligibilityTimer, &QTimer::timeout, this, &ZoominatorController::refreshIndependentWheelTarget);
 }
 
 ZoominatorController::~ZoominatorController()
@@ -545,6 +569,11 @@ void ZoominatorController::frontendEventCallback(enum obs_frontend_event event, 
 		QTimer::singleShot(750, ctl, [ctl]() { ctl->requestRecoveryRestore(); });
 		QTimer::singleShot(3000, ctl, [ctl]() { cleanup_legacy_marker_items_all_scenes(ctl->markerSource); });
 	}
+	if (event == OBS_FRONTEND_EVENT_FINISHED_LOADING || event == OBS_FRONTEND_EVENT_SCENE_CHANGED ||
+	    event == OBS_FRONTEND_EVENT_SCENE_COLLECTION_CHANGED || event == OBS_FRONTEND_EVENT_SCENE_LIST_CHANGED) {
+		ctl->resetIndependentWheelState();
+		QTimer::singleShot(0, ctl, [ctl]() { ctl->refreshIndependentWheelTarget(); });
+	}
 }
 
 void ZoominatorController::markRecoveryActive()
@@ -656,6 +685,14 @@ void ZoominatorController::loadSettings()
 	wheelZoomOutStep = 0.20;
 	wheelZoomMinimum = 1.0;
 	wheelZoomMaximum = 5.0;
+	independentWheelZoomEnabled = false;
+	independentWheelActivationMode = QStringLiteral("hold_modifiers");
+	independentWheelShortcutSequence.clear();
+	wheelModCtrl = wheelModAlt = wheelModShift = wheelModMeta = false;
+	wheelModLeftCtrl = wheelModRightCtrl = false;
+	wheelModLeftAlt = wheelModRightAlt = false;
+	wheelModLeftShift = wheelModRightShift = false;
+	wheelModLeftMeta = wheelModRightMeta = false;
 	animInMs = 180;
 	animOutMs = 320;
 	zoomAnchor = ZoomAnchorMode::CursorFollow;
@@ -819,6 +856,31 @@ void ZoominatorController::loadSettings()
 	wheelZoomMinimum = clampd(wheelZoomMinimum, 1.0, 19.0);
 	wheelZoomMaximum = clampd(wheelZoomMaximum, wheelZoomMinimum + 0.1, 20.0);
 
+	if (obs_data_has_user_value(data, "independent_wheel_zoom_enabled"))
+		independentWheelZoomEnabled = obs_data_get_bool(data, "independent_wheel_zoom_enabled");
+	if (obs_data_has_user_value(data, "independent_wheel_activation_mode"))
+		independentWheelActivationMode = getStr("independent_wheel_activation_mode");
+	if (independentWheelActivationMode != QLatin1String("hold_shortcut") &&
+	    independentWheelActivationMode != QLatin1String("toggle_shortcut"))
+		independentWheelActivationMode = QStringLiteral("hold_modifiers");
+	independentWheelShortcutSequence = getStr("independent_wheel_shortcut");
+	auto loadWheelModifier = [data](const char *key, bool &field) {
+		if (obs_data_has_user_value(data, key))
+			field = obs_data_get_bool(data, key);
+	};
+	loadWheelModifier("wheel_mod_ctrl", wheelModCtrl);
+	loadWheelModifier("wheel_mod_alt", wheelModAlt);
+	loadWheelModifier("wheel_mod_shift", wheelModShift);
+	loadWheelModifier("wheel_mod_meta", wheelModMeta);
+	loadWheelModifier("wheel_mod_left_ctrl", wheelModLeftCtrl);
+	loadWheelModifier("wheel_mod_right_ctrl", wheelModRightCtrl);
+	loadWheelModifier("wheel_mod_left_alt", wheelModLeftAlt);
+	loadWheelModifier("wheel_mod_right_alt", wheelModRightAlt);
+	loadWheelModifier("wheel_mod_left_shift", wheelModLeftShift);
+	loadWheelModifier("wheel_mod_right_shift", wheelModRightShift);
+	loadWheelModifier("wheel_mod_left_meta", wheelModLeftMeta);
+	loadWheelModifier("wheel_mod_right_meta", wheelModRightMeta);
+
 	if (obs_data_has_user_value(data, "anim_in_ms"))
 		animInMs = (int)obs_data_get_int(data, "anim_in_ms");
 	if (obs_data_has_user_value(data, "anim_out_ms"))
@@ -938,12 +1000,27 @@ void ZoominatorController::saveSettings()
 	obs_data_set_double(data, "wheel_zoom_out_step", wheelZoomOutStep);
 	obs_data_set_double(data, "wheel_zoom_minimum", wheelZoomMinimum);
 	obs_data_set_double(data, "wheel_zoom_maximum", wheelZoomMaximum);
+	obs_data_set_bool(data, "independent_wheel_zoom_enabled", independentWheelZoomEnabled);
+	obs_data_set_string(data, "independent_wheel_activation_mode",
+			    independentWheelActivationMode.toUtf8().constData());
+	obs_data_set_string(data, "independent_wheel_shortcut", independentWheelShortcutSequence.toUtf8().constData());
+	obs_data_set_bool(data, "wheel_mod_ctrl", wheelModCtrl);
+	obs_data_set_bool(data, "wheel_mod_alt", wheelModAlt);
+	obs_data_set_bool(data, "wheel_mod_shift", wheelModShift);
+	obs_data_set_bool(data, "wheel_mod_meta", wheelModMeta);
+	obs_data_set_bool(data, "wheel_mod_left_ctrl", wheelModLeftCtrl);
+	obs_data_set_bool(data, "wheel_mod_right_ctrl", wheelModRightCtrl);
+	obs_data_set_bool(data, "wheel_mod_left_alt", wheelModLeftAlt);
+	obs_data_set_bool(data, "wheel_mod_right_alt", wheelModRightAlt);
+	obs_data_set_bool(data, "wheel_mod_left_shift", wheelModLeftShift);
+	obs_data_set_bool(data, "wheel_mod_right_shift", wheelModRightShift);
+	obs_data_set_bool(data, "wheel_mod_left_meta", wheelModLeftMeta);
+	obs_data_set_bool(data, "wheel_mod_right_meta", wheelModRightMeta);
 	obs_data_set_int(data, "anim_in_ms", animInMs);
 	obs_data_set_int(data, "anim_out_ms", animOutMs);
 	obs_data_set_string(data, "zoom_anchor", zoomAnchorModeToString(zoomAnchor).toUtf8().constData());
 	/* Kept so a downgrade to an older build still finds a setting it understands. */
 	obs_data_set_bool(data, "follow_mouse", zoomAnchor == ZoomAnchorMode::CursorFollow);
-	followMouseRuntimeEnabled = true;
 	obs_data_set_double(data, "follow_speed", followSpeed);
 	obs_data_set_bool(data, "center_cursor_until_edge", centerCursorUntilEdge);
 	obs_data_set_int(data, "edge_overflow_margin_pct", edgeOverflowMarginPct);
@@ -3080,6 +3157,56 @@ static ModifierState current_modifiers()
 	return state;
 }
 
+static WheelZoomModifierState wheel_modifier_state(const ModifierState &state)
+{
+	WheelZoomModifierState result;
+	result.leftCtrl = state.leftCtrl;
+	result.rightCtrl = state.rightCtrl;
+	result.leftAlt = state.leftAlt;
+	result.rightAlt = state.rightAlt;
+	result.leftShift = state.leftShift;
+	result.rightShift = state.rightShift;
+	result.leftMeta = state.leftWin;
+	result.rightMeta = state.rightWin;
+	return result;
+}
+
+#ifdef _WIN32
+static ModifierState modifiers_for_key_event(int vk, bool down)
+{
+	ModifierState state = current_modifiers();
+	switch (vk) {
+	case VK_LCONTROL:
+		state.leftCtrl = down;
+		break;
+	case VK_RCONTROL:
+		state.rightCtrl = down;
+		break;
+	case VK_LMENU:
+		state.leftAlt = down;
+		break;
+	case VK_RMENU:
+		state.rightAlt = down;
+		break;
+	case VK_LSHIFT:
+		state.leftShift = down;
+		break;
+	case VK_RSHIFT:
+		state.rightShift = down;
+		break;
+	case VK_LWIN:
+		state.leftWin = down;
+		break;
+	case VK_RWIN:
+		state.rightWin = down;
+		break;
+	default:
+		break;
+	}
+	return state;
+}
+#endif
+
 static bool mods_current(bool wantCtrl, bool wantAlt, bool wantShift, bool wantWin, bool wantLeftCtrl,
 			 bool wantRightCtrl, bool wantLeftAlt, bool wantRightAlt, bool wantLeftShift,
 			 bool wantRightShift, bool wantLeftWin, bool wantRightWin)
@@ -3192,6 +3319,8 @@ LRESULT CALLBACK ZoominatorController::kb_hook_proc(int nCode, WPARAM wParam, LP
 			return CallNextHookEx((HHOOK)g_ctl->keyboardHook, nCode, wParam, lParam);
 
 		const int vk = (int)k->vkCode;
+		g_ctl->handleIndependentWheelKey((uint32_t)vk, down, false,
+						 wheel_modifier_state(modifiers_for_key_event(vk, down)));
 
 		if (g_ctl->followToggleHkValid && down && g_ctl->followToggleHotkeyVk != 0 &&
 		    vk_matches(vk, g_ctl->followToggleHotkeyVk) &&
@@ -3255,6 +3384,18 @@ LRESULT CALLBACK ZoominatorController::mouse_hook_proc(int nCode, WPARAM wParam,
 		const bool up = (wParam == WM_LBUTTONUP || wParam == WM_RBUTTONUP || wParam == WM_MBUTTONUP ||
 				 wParam == WM_XBUTTONUP);
 		const unsigned short mouseData = (unsigned short)HIWORD(m->mouseData);
+
+		/* Independent wheel zoom is routed first so an overlapping legacy X2
+		 * gesture cannot execute the same wheel movement twice. */
+		if (wParam == WM_MOUSEWHEEL) {
+			const WheelZoomModifierState modifiers = wheel_modifier_state(current_modifiers());
+			if (g_ctl->shouldConsumeIndependentWheel(m->pt.x, m->pt.y, modifiers)) {
+				const int steps = g_ctl->independentWheelState.addWheelDelta(
+					GET_WHEEL_DELTA_WPARAM(m->mouseData), WHEEL_DELTA);
+				g_ctl->enqueueIndependentWheelDelta(steps);
+				return 1;
+			}
+		}
 
 		/* Match the X11 Mouse5 gesture on Windows. WH_MOUSE_LL reports wheel
 		 * input globally and lets the hook consume only the events belonging to
@@ -4225,16 +4366,231 @@ void ZoominatorController::rebuildTriggersFromSettings()
 	} else {
 		hkValid = true;
 	}
+
+	rebuildIndependentWheelBinding();
+}
+
+bool ZoominatorController::independentWheelZoomSupported() const
+{
+#ifdef _WIN32
+	return true;
+#else
+	return false;
+#endif
+}
+
+bool ZoominatorController::independentWheelZoomBindingValid() const
+{
+	return independentWheelZoomSupported() && independentWheelBinding.valid();
+}
+
+bool ZoominatorController::independentWheelZoomArmed() const
+{
+	return independentWheelState.armed();
+}
+
+bool ZoominatorController::independentWheelZoomBackendAvailable() const
+{
+	return independentWheelBackendReady.load(std::memory_order_acquire);
+}
+
+bool ZoominatorController::independentWheelZoomTargetAvailable() const
+{
+	return independentWheelTargetReady.load(std::memory_order_acquire);
+}
+
+void ZoominatorController::resetIndependentWheelState()
+{
+	independentWheelState.reset();
+	pendingIndependentWheelDelta.store(0, std::memory_order_release);
+	independentWheelGeneration.fetch_add(1, std::memory_order_acq_rel);
+	queueIndependentWheelStatusUpdate();
+}
+
+void ZoominatorController::rebuildIndependentWheelBinding()
+{
+	WheelZoomBinding binding;
+	binding.enabled = independentWheelZoomEnabled && independentWheelZoomSupported();
+	binding.mode = wheelActivationModeFromString(independentWheelActivationMode);
+	binding.ctrl = {wheelModCtrl, wheelModLeftCtrl, wheelModRightCtrl};
+	binding.alt = {wheelModAlt, wheelModLeftAlt, wheelModRightAlt};
+	binding.shift = {wheelModShift, wheelModLeftShift, wheelModRightShift};
+	binding.meta = {wheelModMeta, wheelModLeftMeta, wheelModRightMeta};
+	independentWheelShortcutVk = 0;
+
+	if (binding.mode != WheelZoomActivationMode::HoldModifiers) {
+		QKeySequence sequence(independentWheelShortcutSequence);
+		if (!sequence.isEmpty()) {
+			const QKeyCombination combination = sequence[0];
+			const auto modifiers = combination.keyboardModifiers();
+			binding.key = (uint32_t)qtKeyToVk(int(combination.key()));
+			binding.ctrl.any = modifiers.testFlag(Qt::ControlModifier);
+			binding.alt.any = modifiers.testFlag(Qt::AltModifier);
+			binding.shift.any = modifiers.testFlag(Qt::ShiftModifier);
+			binding.meta.any = modifiers.testFlag(Qt::MetaModifier);
+			binding.ctrl.left = binding.ctrl.right = false;
+			binding.alt.left = binding.alt.right = false;
+			binding.shift.left = binding.shift.right = false;
+			binding.meta.left = binding.meta.right = false;
+#ifdef _WIN32
+			if (binding.key == VK_CONTROL || binding.key == VK_LCONTROL || binding.key == VK_RCONTROL ||
+			    binding.key == VK_MENU || binding.key == VK_LMENU || binding.key == VK_RMENU ||
+			    binding.key == VK_SHIFT || binding.key == VK_LSHIFT || binding.key == VK_RSHIFT ||
+			    binding.key == VK_LWIN || binding.key == VK_RWIN)
+				binding.key = 0;
+#endif
+		}
+		independentWheelShortcutVk = (int)binding.key;
+	}
+
+	independentWheelBinding = binding;
+	independentWheelState.configure(binding);
+	pendingIndependentWheelDelta.store(0, std::memory_order_release);
+	independentWheelGeneration.fetch_add(1, std::memory_order_acq_rel);
+
+	if (binding.valid()) {
+		if (!wheelEligibilityTimer.isActive())
+			wheelEligibilityTimer.start();
+	} else {
+		wheelEligibilityTimer.stop();
+		independentWheelTargetReady.store(false, std::memory_order_release);
+	}
+	QTimer::singleShot(0, this, [this]() { refreshIndependentWheelTarget(); });
+}
+
+void ZoominatorController::refreshIndependentWheelTarget()
+{
+	bool ready = independentWheelZoomBindingValid() && independentWheelZoomBackendAvailable() &&
+		     !screenKey.isEmpty();
+	int x = 0, y = 0, w = 0, h = 0;
+	if (ready) {
+		std::vector<obs_sceneitem_t *> items;
+		ready = getSelectedScreenRect(x, y, w, h) && w > 0 && h > 0;
+		if (ready) {
+			enumerateTargetItemsInCurrentScene(items);
+			ready = !items.empty();
+		}
+	}
+
+	const bool wasReady = independentWheelTargetReady.exchange(false, std::memory_order_acq_rel);
+	const bool targetChanged = wasReady && ready &&
+				   (independentWheelTargetX.load(std::memory_order_relaxed) != x ||
+				    independentWheelTargetY.load(std::memory_order_relaxed) != y ||
+				    independentWheelTargetWidth.load(std::memory_order_relaxed) != w ||
+				    independentWheelTargetHeight.load(std::memory_order_relaxed) != h);
+	independentWheelTargetX.store(x, std::memory_order_relaxed);
+	independentWheelTargetY.store(y, std::memory_order_relaxed);
+	independentWheelTargetWidth.store(w, std::memory_order_relaxed);
+	independentWheelTargetHeight.store(h, std::memory_order_relaxed);
+	independentWheelTargetReady.store(ready, std::memory_order_release);
+	if ((wasReady && !ready) || targetChanged)
+		resetIndependentWheelState();
+	else if (wasReady != ready)
+		queueIndependentWheelStatusUpdate();
+}
+
+void ZoominatorController::handleIndependentWheelKey(uint32_t key, bool down, bool repeat,
+						     const WheelZoomModifierState &modifiers)
+{
+	if (!independentWheelZoomBindingValid())
+		return;
+	if (independentWheelState.handleKey(key, down, repeat, modifiers))
+		queueIndependentWheelStatusUpdate();
+}
+
+bool ZoominatorController::shouldConsumeIndependentWheel(int x, int y, const WheelZoomModifierState &modifiers) const
+{
+	if (!independentWheelBackendReady.load(std::memory_order_acquire) ||
+	    !independentWheelTargetReady.load(std::memory_order_acquire) ||
+	    !independentWheelState.activeForWheel(modifiers))
+		return false;
+	const int targetX = independentWheelTargetX.load(std::memory_order_relaxed);
+	const int targetY = independentWheelTargetY.load(std::memory_order_relaxed);
+	const int targetW = independentWheelTargetWidth.load(std::memory_order_relaxed);
+	const int targetH = independentWheelTargetHeight.load(std::memory_order_relaxed);
+	return x >= targetX && x < targetX + targetW && y >= targetY && y < targetY + targetH;
+}
+
+void ZoominatorController::enqueueIndependentWheelDelta(int steps)
+{
+	if (steps == 0)
+		return;
+	pendingIndependentWheelDelta.fetch_add(steps, std::memory_order_acq_rel);
+	bool expected = false;
+	if (!independentWheelWorkQueued.compare_exchange_strong(expected, true, std::memory_order_acq_rel))
+		return;
+	const uint64_t generation = independentWheelGeneration.load(std::memory_order_acquire);
+	QMetaObject::invokeMethod(
+		this, [this, generation]() { processIndependentWheelDelta(generation); }, Qt::QueuedConnection);
+}
+
+void ZoominatorController::processIndependentWheelDelta(uint64_t generation)
+{
+	if (generation == independentWheelGeneration.load(std::memory_order_acquire)) {
+		const int steps = pendingIndependentWheelDelta.exchange(0, std::memory_order_acq_rel);
+		if (steps != 0)
+			applyIndependentWheelSteps(steps);
+	}
+	independentWheelWorkQueued.store(false, std::memory_order_release);
+	if (pendingIndependentWheelDelta.load(std::memory_order_acquire) != 0) {
+		bool expected = false;
+		if (independentWheelWorkQueued.compare_exchange_strong(expected, true, std::memory_order_acq_rel)) {
+			const uint64_t nextGeneration = independentWheelGeneration.load(std::memory_order_acquire);
+			QMetaObject::invokeMethod(
+				this, [this, nextGeneration]() { processIndependentWheelDelta(nextGeneration); },
+				Qt::QueuedConnection);
+		}
+	}
+}
+
+void ZoominatorController::queueIndependentWheelStatusUpdate()
+{
+	bool expected = false;
+	if (!independentWheelStatusQueued.compare_exchange_strong(expected, true, std::memory_order_acq_rel))
+		return;
+	QMetaObject::invokeMethod(
+		this,
+		[this]() {
+			independentWheelStatusQueued.store(false, std::memory_order_release);
+			emit settingsChanged();
+		},
+		Qt::QueuedConnection);
+}
+
+void ZoominatorController::applyIndependentWheelSteps(int steps)
+{
+	if (steps == 0)
+		return;
+	const bool active = zoomActive.load(std::memory_order_acquire);
+	const double current = active ? std::max(1.0, zoomFactor) : 1.0;
+	const double next = computeWheelZoomTarget(zoomFactor, active, steps, wheelZoomInStep, wheelZoomOutStep,
+						   wheelZoomMinimum, wheelZoomMaximum);
+	if (std::fabs(next - current) < 0.000001)
+		return;
+
+	zoomFactor = next;
+	if (next <= 1.0) {
+		if (active)
+			startZoomOut();
+	} else if (!active) {
+		renderedZoomFactor = 1.0;
+		animT = 0.0;
+		startZoomIn();
+	} else if (animDir.load(std::memory_order_relaxed) < 0) {
+		startZoomIn();
+	}
+	scheduleSettingsSave();
+	emit settingsChanged();
 }
 
 bool ZoominatorController::needsKeyboardHook() const
 {
-	return triggerType == "keyboard" || followToggleHkValid;
+	return triggerType == "keyboard" || followToggleHkValid || independentWheelZoomBindingValid();
 }
 
 bool ZoominatorController::needsMouseHook() const
 {
-	return triggerType == "mouse" || showCursorMarker;
+	return triggerType == "mouse" || showCursorMarker || independentWheelZoomBindingValid();
 }
 
 void ZoominatorController::installHooks()
@@ -4251,6 +4607,12 @@ void ZoominatorController::installHooks()
 	if (needsMouseHook() && !mouseHook) {
 		mouseHook = (void *)SetWindowsHookExW(WH_MOUSE_LL, mouse_hook_proc, GetModuleHandleW(nullptr), 0);
 	}
+	const bool independentReady = independentWheelZoomBindingValid() && keyboardHook && mouseHook;
+	independentWheelBackendReady.store(independentReady, std::memory_order_release);
+	if (independentWheelZoomBindingValid() && !independentReady)
+		blog(LOG_WARNING,
+		     "[Zoominator] Independent wheel zoom input hooks could not be installed; wheel input will pass through.");
+	refreshIndependentWheelTarget();
 #elif defined(__APPLE__)
 	g_ctl = this;
 
@@ -4352,6 +4714,9 @@ void ZoominatorController::installHooks()
 
 void ZoominatorController::uninstallHooks()
 {
+	independentWheelBackendReady.store(false, std::memory_order_release);
+	independentWheelTargetReady.store(false, std::memory_order_release);
+	resetIndependentWheelState();
 #ifdef _WIN32
 	if (keyboardHook) {
 		UnhookWindowsHookEx((HHOOK)keyboardHook);

@@ -16,6 +16,8 @@
 #include <mutex>
 #include <vector>
 
+#include "wheel-zoom-state.hpp"
+
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
 #include <Windows.h>
@@ -45,6 +47,8 @@ public:
 
 	static QString zoomAnchorModeToString(ZoomAnchorMode mode);
 	static ZoomAnchorMode zoomAnchorModeFromString(const QString &value);
+	static QString wheelActivationModeToString(WheelZoomActivationMode mode);
+	static WheelZoomActivationMode wheelActivationModeFromString(const QString &value);
 
 	static ZoominatorController &instance();
 
@@ -55,6 +59,11 @@ public:
 	void loadSettings();
 	void notifySettingsChanged();
 	void rebuildRuntimeHooks();
+	bool independentWheelZoomSupported() const;
+	bool independentWheelZoomBindingValid() const;
+	bool independentWheelZoomArmed() const;
+	bool independentWheelZoomBackendAvailable() const;
+	bool independentWheelZoomTargetAvailable() const;
 
 	QString screenKey;
 	QString hotkeySequence;
@@ -81,6 +90,21 @@ public:
 	double wheelZoomOutStep = 0.20;
 	double wheelZoomMinimum = 1.0;
 	double wheelZoomMaximum = 5.0;
+	bool independentWheelZoomEnabled = false;
+	QString independentWheelActivationMode = QStringLiteral("hold_modifiers");
+	QString independentWheelShortcutSequence;
+	bool wheelModCtrl = false;
+	bool wheelModAlt = false;
+	bool wheelModShift = false;
+	bool wheelModMeta = false;
+	bool wheelModLeftCtrl = false;
+	bool wheelModRightCtrl = false;
+	bool wheelModLeftAlt = false;
+	bool wheelModRightAlt = false;
+	bool wheelModLeftShift = false;
+	bool wheelModRightShift = false;
+	bool wheelModLeftMeta = false;
+	bool wheelModRightMeta = false;
 	int animInMs = 180;
 	int animOutMs = 320;
 	ZoomAnchorMode zoomAnchor = ZoomAnchorMode::CursorFollow;
@@ -129,6 +153,15 @@ private:
 	void adjustActiveZoomFromWheel(int direction, int steps = 1);
 	bool usesWheelZoomGesture() const;
 	void finishWheelZoomGesture();
+	void rebuildIndependentWheelBinding();
+	void refreshIndependentWheelTarget();
+	void resetIndependentWheelState();
+	void handleIndependentWheelKey(uint32_t key, bool down, bool repeat, const WheelZoomModifierState &modifiers);
+	bool shouldConsumeIndependentWheel(int x, int y, const WheelZoomModifierState &modifiers) const;
+	void enqueueIndependentWheelDelta(int delta);
+	void processIndependentWheelDelta(uint64_t generation);
+	void queueIndependentWheelStatusUpdate();
+	void applyIndependentWheelSteps(int steps);
 	void toggleFollowMouseRuntime();
 	bool triggerMatchesKeyboard(int vk) const;
 	bool triggerMatchesMouse(unsigned int msg, unsigned short mouseData) const;
@@ -192,11 +225,24 @@ private:
 	std::atomic<bool> pendingFinish{false};
 
 	QTimer tickTimer;
+	QTimer wheelEligibilityTimer;
 	bool zoomPressed = false;
 	bool zoomLatched = false;
 	bool zoomAdjustButtonHeld = false;
 	bool zoomAdjustedDuringButtonHold = false;
 	int wheelDeltaRemainder = 0;
+	WheelZoomBinding independentWheelBinding;
+	WheelZoomState independentWheelState;
+	std::atomic<bool> independentWheelBackendReady{false};
+	std::atomic<bool> independentWheelTargetReady{false};
+	std::atomic<int> independentWheelTargetX{0};
+	std::atomic<int> independentWheelTargetY{0};
+	std::atomic<int> independentWheelTargetWidth{0};
+	std::atomic<int> independentWheelTargetHeight{0};
+	std::atomic<int> pendingIndependentWheelDelta{0};
+	std::atomic<bool> independentWheelWorkQueued{false};
+	std::atomic<bool> independentWheelStatusQueued{false};
+	std::atomic<uint64_t> independentWheelGeneration{1};
 	/* Release-stored by the main thread once capture completes, acquire-loaded
 	 * by the graphics thread; that ordering is what makes sceneItems safe to
 	 * read there without holding a lock across the transform writes. */
@@ -291,6 +337,7 @@ private:
 	bool followToggleModAlt = false;
 	bool followToggleModShift = false;
 	bool followToggleModWin = false;
+	int independentWheelShortcutVk = 0;
 
 #ifdef _WIN32
 	static LRESULT CALLBACK kb_hook_proc(int nCode, WPARAM wParam, LPARAM lParam);

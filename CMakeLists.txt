@@ -55,10 +55,23 @@ endif()
 
 target_sources(${CMAKE_PROJECT_NAME} PRIVATE
   src/plugin-main.cpp
+  src/wheel-zoom-state.cpp
+  src/wheel-zoom-state.hpp
   src/zoominator-controller.cpp
   src/zoominator-controller.hpp
   src/zoominator-dialog.cpp
   src/zoominator-dialog.hpp
 )
+
+include(CTest)
+if(BUILD_TESTING)
+  add_executable(wheel-zoom-state-test
+    tests/wheel-zoom-state-test.cpp
+    src/wheel-zoom-state.cpp
+  )
+  target_include_directories(wheel-zoom-state-test PRIVATE src)
+  target_compile_features(wheel-zoom-state-test PRIVATE cxx_std_17)
+  add_test(NAME wheel-zoom-state COMMAND wheel-zoom-state-test)
+endif()
 
 set_target_properties_plugin(${CMAKE_PROJECT_NAME} PROPERTIES OUTPUT_NAME ${_name})

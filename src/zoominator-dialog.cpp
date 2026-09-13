@@ -122,7 +122,7 @@ ZoominatorDialog::ZoominatorDialog(QWidget *parent) : QDialog(parent)
 {
 	setWindowTitle(T("Zoominator"));
 	setModal(false);
-	resize(620, 560);
+	resize(700, 720);
 
 	buildUi();
 
@@ -135,6 +135,8 @@ ZoominatorDialog::ZoominatorDialog(QWidget *parent) : QDialog(parent)
 
 	refreshLists();
 	loadFromController();
+	connect(&ZoominatorController::instance(), &ZoominatorController::settingsChanged, this,
+		&ZoominatorDialog::updateWheelZoomStatus);
 }
 
 void ZoominatorDialog::closeEvent(QCloseEvent *event)
@@ -292,6 +294,61 @@ void ZoominatorDialog::buildUi()
 		}
 		lay->addWidget(rowModifiersWidget);
 
+		addSection(lay, T("Dialog.Section.WheelZoom"));
+		chkIndependentWheelZoom = new QCheckBox(T("Dialog.WheelZoom.Enable"), page);
+		lay->addWidget(chkIndependentWheelZoom);
+		lay->addSpacing(8);
+
+		cmbWheelZoomActivation = new QComboBox(page);
+		cmbWheelZoomActivation->addItem(T("Dialog.WheelZoom.HoldModifiers"), "hold_modifiers");
+		cmbWheelZoomActivation->addItem(T("Dialog.WheelZoom.HoldShortcut"), "hold_shortcut");
+		cmbWheelZoomActivation->addItem(T("Dialog.WheelZoom.ToggleShortcut"), "toggle_shortcut");
+		lay->addWidget(mkField(T("Dialog.WheelZoom.Activation"), cmbWheelZoomActivation));
+		lay->addSpacing(8);
+
+		rowWheelModifiersWidget = new QWidget(page);
+		{
+			auto *grid = new QGridLayout(rowWheelModifiersWidget);
+			grid->setContentsMargins(0, 0, 0, 0);
+			chkWheelCtrl = new QCheckBox(T("Dialog.Mod.CtrlAny"), rowWheelModifiersWidget);
+			chkWheelLeftCtrl = new QCheckBox(T("Dialog.Mod.LeftCtrl"), rowWheelModifiersWidget);
+			chkWheelRightCtrl = new QCheckBox(T("Dialog.Mod.RightCtrl"), rowWheelModifiersWidget);
+			chkWheelAlt = new QCheckBox(T("Dialog.Mod.AltAny"), rowWheelModifiersWidget);
+			chkWheelLeftAlt = new QCheckBox(T("Dialog.Mod.LeftAlt"), rowWheelModifiersWidget);
+			chkWheelRightAlt = new QCheckBox(T("Dialog.Mod.RightAlt"), rowWheelModifiersWidget);
+			chkWheelShift = new QCheckBox(T("Dialog.Mod.ShiftAny"), rowWheelModifiersWidget);
+			chkWheelLeftShift = new QCheckBox(T("Dialog.Mod.LeftShift"), rowWheelModifiersWidget);
+			chkWheelRightShift = new QCheckBox(T("Dialog.Mod.RightShift"), rowWheelModifiersWidget);
+			chkWheelMeta = new QCheckBox(T("Dialog.Mod.MetaWinAny"), rowWheelModifiersWidget);
+			chkWheelLeftMeta = new QCheckBox(T("Dialog.Mod.LeftMetaWin"), rowWheelModifiersWidget);
+			chkWheelRightMeta = new QCheckBox(T("Dialog.Mod.RightMetaWin"), rowWheelModifiersWidget);
+			QCheckBox *boxes[] = {chkWheelCtrl,  chkWheelLeftCtrl,  chkWheelRightCtrl,
+					      chkWheelAlt,   chkWheelLeftAlt,   chkWheelRightAlt,
+					      chkWheelShift, chkWheelLeftShift, chkWheelRightShift,
+					      chkWheelMeta,  chkWheelLeftMeta,  chkWheelRightMeta};
+			for (int i = 0; i < 12; ++i)
+				grid->addWidget(boxes[i], i / 3, i % 3);
+		}
+		lay->addWidget(rowWheelModifiersWidget);
+
+		rowWheelShortcutWidget = new QWidget(page);
+		{
+			auto *h = new QHBoxLayout(rowWheelShortcutWidget);
+			h->setContentsMargins(0, 0, 0, 0);
+			editWheelZoomShortcut = new QKeySequenceEdit(rowWheelShortcutWidget);
+			editWheelZoomShortcut->setMaximumSequenceLength(1);
+			btnClearWheelZoomShortcut = new QPushButton(T("Dialog.Clear"), rowWheelShortcutWidget);
+			h->addWidget(editWheelZoomShortcut, 1);
+			h->addWidget(btnClearWheelZoomShortcut);
+		}
+		lay->addWidget(rowWheelShortcutWidget);
+		auto *wheelHelp = new QLabel(T("Dialog.WheelZoom.Help"), page);
+		wheelHelp->setWordWrap(true);
+		lay->addWidget(wheelHelp);
+		lblWheelZoomStatus = new QLabel(page);
+		lblWheelZoomStatus->setWordWrap(true);
+		lay->addWidget(lblWheelZoomStatus);
+
 		lay->addStretch(1);
 		tabWidget->addTab(page, T("Dialog.Tab.Trigger"));
 
@@ -301,6 +358,9 @@ void ZoominatorDialog::buildUi()
 			rowMouseWidget->setVisible(isMouse);
 			rowModifiersWidget->setVisible(isMouse);
 		});
+		connect(chkIndependentWheelZoom, &QCheckBox::toggled, this, [this](bool) { updateWheelZoomUi(); });
+		connect(cmbWheelZoomActivation, &QComboBox::currentIndexChanged, this,
+			[this](int) { updateWheelZoomUi(); });
 	}
 
 	{
@@ -515,6 +575,7 @@ void ZoominatorDialog::buildUi()
 	connect(btnTest, &QPushButton::clicked, this, &ZoominatorDialog::testZoom);
 	connect(btnClearHotkey, &QPushButton::clicked, this, &ZoominatorDialog::clearHotkey);
 	connect(btnClearFollowToggleHotkey, &QPushButton::clicked, this, &ZoominatorDialog::clearFollowToggleHotkey);
+	connect(btnClearWheelZoomShortcut, &QPushButton::clicked, this, &ZoominatorDialog::clearWheelZoomShortcut);
 	connect(btnMarkerColor, &QPushButton::clicked, this, &ZoominatorDialog::chooseMarkerColor);
 	connect(chkShowCursorMarker, &QCheckBox::toggled, chkShowMarkerWhenNotZoomed, &QWidget::setEnabled);
 }
@@ -692,6 +753,24 @@ void ZoominatorDialog::loadFromController()
 		rowHotkeyWidget->setVisible(!isMouse);
 		rowMouseWidget->setVisible(isMouse);
 		rowModifiersWidget->setVisible(isMouse);
+
+		chkIndependentWheelZoom->setChecked(c.independentWheelZoomEnabled);
+		idx = cmbWheelZoomActivation->findData(c.independentWheelActivationMode);
+		cmbWheelZoomActivation->setCurrentIndex(idx >= 0 ? idx : 0);
+		editWheelZoomShortcut->setKeySequence(QKeySequence(c.independentWheelShortcutSequence));
+		chkWheelCtrl->setChecked(c.wheelModCtrl);
+		chkWheelAlt->setChecked(c.wheelModAlt);
+		chkWheelShift->setChecked(c.wheelModShift);
+		chkWheelMeta->setChecked(c.wheelModMeta);
+		chkWheelLeftCtrl->setChecked(c.wheelModLeftCtrl);
+		chkWheelRightCtrl->setChecked(c.wheelModRightCtrl);
+		chkWheelLeftAlt->setChecked(c.wheelModLeftAlt);
+		chkWheelRightAlt->setChecked(c.wheelModRightAlt);
+		chkWheelLeftShift->setChecked(c.wheelModLeftShift);
+		chkWheelRightShift->setChecked(c.wheelModRightShift);
+		chkWheelLeftMeta->setChecked(c.wheelModLeftMeta);
+		chkWheelRightMeta->setChecked(c.wheelModRightMeta);
+		updateWheelZoomUi();
 	}
 
 	{
@@ -754,6 +833,21 @@ void ZoominatorDialog::applyToController()
 	c.modRightWin = chkRightWin->isChecked();
 
 	c.hotkeySequence = editHotkey->keySequence().toString(QKeySequence::NativeText);
+	c.independentWheelZoomEnabled = chkIndependentWheelZoom->isChecked();
+	c.independentWheelActivationMode = cmbWheelZoomActivation->currentData().toString();
+	c.independentWheelShortcutSequence = editWheelZoomShortcut->keySequence().toString(QKeySequence::NativeText);
+	c.wheelModCtrl = chkWheelCtrl->isChecked();
+	c.wheelModAlt = chkWheelAlt->isChecked();
+	c.wheelModShift = chkWheelShift->isChecked();
+	c.wheelModMeta = chkWheelMeta->isChecked();
+	c.wheelModLeftCtrl = chkWheelLeftCtrl->isChecked();
+	c.wheelModRightCtrl = chkWheelRightCtrl->isChecked();
+	c.wheelModLeftAlt = chkWheelLeftAlt->isChecked();
+	c.wheelModRightAlt = chkWheelRightAlt->isChecked();
+	c.wheelModLeftShift = chkWheelLeftShift->isChecked();
+	c.wheelModRightShift = chkWheelRightShift->isChecked();
+	c.wheelModLeftMeta = chkWheelLeftMeta->isChecked();
+	c.wheelModRightMeta = chkWheelRightMeta->isChecked();
 
 	c.zoomFactor = spZoom->value();
 	c.wheelZoomInStep = spWheelZoomInStep->value();
@@ -805,6 +899,50 @@ void ZoominatorDialog::clearHotkey()
 void ZoominatorDialog::clearFollowToggleHotkey()
 {
 	editFollowToggleHotkey->setKeySequence(QKeySequence());
+}
+
+void ZoominatorDialog::clearWheelZoomShortcut()
+{
+	editWheelZoomShortcut->setKeySequence(QKeySequence());
+}
+
+void ZoominatorDialog::updateWheelZoomUi()
+{
+	if (!chkIndependentWheelZoom || !cmbWheelZoomActivation)
+		return;
+	const bool supported = ZoominatorController::instance().independentWheelZoomSupported();
+	chkIndependentWheelZoom->setEnabled(supported);
+	const bool enabled = chkIndependentWheelZoom->isChecked() && supported;
+	const bool modifiers = cmbWheelZoomActivation->currentData().toString() == QLatin1String("hold_modifiers");
+	cmbWheelZoomActivation->setEnabled(enabled);
+	rowWheelModifiersWidget->setVisible(modifiers);
+	rowWheelModifiersWidget->setEnabled(enabled);
+	rowWheelShortcutWidget->setVisible(!modifiers);
+	rowWheelShortcutWidget->setEnabled(enabled);
+	updateWheelZoomStatus();
+}
+
+void ZoominatorDialog::updateWheelZoomStatus()
+{
+	if (!lblWheelZoomStatus || !chkIndependentWheelZoom)
+		return;
+	auto &c = ZoominatorController::instance();
+	QString status;
+	if (!chkIndependentWheelZoom->isChecked())
+		status = T("Dialog.WheelZoom.Status.Disabled");
+	else if (!c.independentWheelZoomSupported())
+		status = T("Dialog.WheelZoom.Status.Unsupported");
+	else if (!c.independentWheelZoomBindingValid())
+		status = T("Dialog.WheelZoom.Status.Invalid");
+	else if (!c.independentWheelZoomBackendAvailable())
+		status = T("Dialog.WheelZoom.Status.BackendUnavailable");
+	else if (!c.independentWheelZoomTargetAvailable())
+		status = T("Dialog.WheelZoom.Status.TargetUnavailable");
+	else if (c.independentWheelZoomArmed())
+		status = T("Dialog.WheelZoom.Status.Armed");
+	else
+		status = T("Dialog.WheelZoom.Status.Ready");
+	lblWheelZoomStatus->setText(status);
 }
 
 void ZoominatorDialog::updateMarkerColorButton(const QColor &color)

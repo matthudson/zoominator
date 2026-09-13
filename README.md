@@ -32,7 +32,17 @@ It operates at the **scene level**, meaning it works with any source automatical
 - **Flexible Activation**  
   Toggle or hold behavior with customizable key combinations.
 
-- **Wheel Zoom (Windows and X11)**
+- **Independent Wheel Zoom (Windows)**
+  Enable this in the Trigger tab and choose one explicit activation mode:
+  hold modifiers, hold a keyboard shortcut, or toggle a keyboard shortcut.
+  While armed over the selected target screen, vertical wheel input changes
+  zoom and is consumed so the foreground application does not also scroll.
+  Releasing or disarming keeps the chosen magnification and mouse-follow state.
+  Empty bindings and unavailable targets always pass wheel input through.
+  Activation keys are not swallowed, so choose shortcuts that do not conflict
+  with Windows or the foreground application.
+
+- **Legacy Mouse X2 Wheel Zoom (Windows and X11)**
   With Mouse X2 in toggle mode and no modifiers, hold the button and scroll to
   change zoom. Release the button to keep the selected level, or click it
   without scrolling to reset. The plugin consumes wheel events during the
@@ -85,11 +95,16 @@ cmake --build . --config Release
 
 ## Compatibility Notes
 
-- **Windows:** Full support (global input, smooth tracking, and Mouse X2 + wheel zoom)
+- **Windows:** Full support (global input, smooth tracking, independent wheel zoom, and legacy Mouse X2 + wheel zoom)
 - **macOS:** Requires Accessibility permissions for input tracking
 - **Linux (X11):** Supported via XInput2
-- **Wheel zoom:** Supported on Windows and Linux X11. Zoom-in and zoom-out sensitivity, minimum and
-  maximum zoom, and animation durations are configurable in the Advanced tab.
+- **Independent wheel zoom:** Supported on Windows. The current X11 passive
+  Mouse5 grab cannot safely suppress arbitrary modifier/keyboard gestures, and
+  the current macOS event tap is listen-only, so the new activation modes are
+  disabled there rather than allowing both OBS and the foreground application
+  to react. Legacy Mouse X2 wheel zoom remains supported on Windows and X11.
+  Zoom-in/out sensitivity, limits, and animation durations are configured in
+  the Advanced tab.
 - **Wayland:** Native sessions are detected and X11 hooks are disabled. The
   Global Shortcuts portal can support hotkeys, but Wayland currently has no
   standard passive global cursor-position portal, so full mouse tracking still

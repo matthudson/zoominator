@@ -29,6 +29,7 @@ private slots:
 	void testZoom();
 	void clearHotkey();
 	void clearFollowToggleHotkey();
+	void clearWheelZoomShortcut();
 	void chooseMarkerColor();
 	void populateSourcesTab();
 
@@ -37,6 +38,8 @@ private:
 	void loadFromController();
 	void populateSources();
 	void updateMarkerColorButton(const QColor &color);
+	void updateWheelZoomUi();
+	void updateWheelZoomStatus();
 
 	static void obsSourceChanged(void *data, struct calldata *cd);
 
@@ -63,6 +66,23 @@ private:
 	QCheckBox *chkRightShift = nullptr;
 	QCheckBox *chkLeftWin = nullptr;
 	QCheckBox *chkRightWin = nullptr;
+	QCheckBox *chkIndependentWheelZoom = nullptr;
+	QComboBox *cmbWheelZoomActivation = nullptr;
+	QKeySequenceEdit *editWheelZoomShortcut = nullptr;
+	QPushButton *btnClearWheelZoomShortcut = nullptr;
+	QCheckBox *chkWheelCtrl = nullptr;
+	QCheckBox *chkWheelAlt = nullptr;
+	QCheckBox *chkWheelShift = nullptr;
+	QCheckBox *chkWheelMeta = nullptr;
+	QCheckBox *chkWheelLeftCtrl = nullptr;
+	QCheckBox *chkWheelRightCtrl = nullptr;
+	QCheckBox *chkWheelLeftAlt = nullptr;
+	QCheckBox *chkWheelRightAlt = nullptr;
+	QCheckBox *chkWheelLeftShift = nullptr;
+	QCheckBox *chkWheelRightShift = nullptr;
+	QCheckBox *chkWheelLeftMeta = nullptr;
+	QCheckBox *chkWheelRightMeta = nullptr;
+	QLabel *lblWheelZoomStatus = nullptr;
 
 	QDoubleSpinBox *spZoom = nullptr;
 	QDoubleSpinBox *spWheelZoomInStep = nullptr;
@@ -94,6 +114,8 @@ private:
 	QWidget *rowHotkeyWidget = nullptr;
 	QWidget *rowMouseWidget = nullptr;
 	QWidget *rowModifiersWidget = nullptr;
+	QWidget *rowWheelModifiersWidget = nullptr;
+	QWidget *rowWheelShortcutWidget = nullptr;
 
 	bool loading = false;
 };
