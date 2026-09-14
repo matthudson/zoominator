@@ -1,178 +1,161 @@
-# Zoominator – Smart Scene Zoom & Follow for OBS Studio
+# Zoominator
 
-[![Watch the demo](https://img.youtube.com/vi/R3KQnsnzIAM/0.jpg)](https://www.youtube.com/watch?v=R3KQnsnzIAM)
+[![Build](https://github.com/matthudson/zoominator/actions/workflows/push.yaml/badge.svg?branch=main)](https://github.com/matthudson/zoominator/actions/workflows/push.yaml)
+[![License: GPL-2.0](https://img.shields.io/badge/License-GPL--2.0-blue.svg)](LICENSE)
 
-Zoominator is an OBS Studio plugin that dynamically **zooms and pans the entire scene** to follow your mouse, keeping the focus exactly where the action happens.
+Zoominator is an OBS Studio plugin that zooms and pans an entire scene around
+the mouse pointer. Because the transform is applied at scene level, it works
+with display capture, window capture, cameras, overlays, and other source types
+without adding a filter to every source.
 
-It operates at the **scene level**, meaning it works with any source automatically no per-source setup, no dock, no complexity.
+[Watch the original demonstration](https://www.youtube.com/watch?v=R3KQnsnzIAM).
 
----
+## Features
 
-## What It Does
+- Scene-wide animated zoom and pan with clamping to prevent black edges.
+- Center, static-cursor, or continuously-following zoom anchors.
+- Ultrawide edge tracking and configurable idle freeze.
+- Keyboard and mouse-button activation with toggle or hold behaviour.
+- Optional click halo.
+- Windows independent wheel zoom with configurable activation, sensitivity,
+  minimum, and maximum magnification.
+- Windows reset binding, including exact modifier and mouse-button chords such
+  as `Ctrl+Alt+Middle Mouse`.
+- Windows presenter viewport guide with a configurable activation zoom,
+  capture-safety status, explicit show-anyway override, and a rounding-safe gap
+  that keeps the guide outside the recorded viewport.
+- Legacy Mouse X2 plus wheel adjustment on Windows and X11.
 
-- **Scene-wide Zoom & Pan**  
-  Smoothly transforms the entire scene based on mouse position.
+## Platform support
 
-- **Smart Clamping**  
-  Ensures the canvas is always fully covered no black edges, even with cropped sources.
+| Capability | Windows | Linux/X11 | macOS |
+| --- | --- | --- | --- |
+| Scene zoom and mouse following | Yes | Yes, via XInput2 | Yes, with Accessibility permission |
+| Legacy Mouse X2 wheel zoom | Yes | Yes | No |
+| Independent wheel activation modes | Yes | Deferred | Deferred |
+| Reset keyboard/mouse binding | Yes | Deferred | Deferred |
+| Presenter viewport guide | Yes | Deferred | Deferred |
 
-- **Mouse-Driven Focus**  
-  Choose where the zoom is anchored: the canvas center, the cursor position at
-  trigger time (static), or the cursor position with continuous following.
-
-- **Ultrawide Edge Tracking**
-  Optionally keeps the cursor centered until the captured scene reaches an edge.
-
-- **Idle Freeze**
-  Pauses mouse following after a configurable idle timeout and resumes on movement.
-
-- **Click Highlight (Halo)**  
-  Optional click-only visual feedback using a configurable halo.
-
-- **Flexible Activation**  
-  Toggle or hold behavior with customizable key combinations.
-
-- **Independent Wheel Zoom (Windows)**
-  Enable this in the Trigger tab and choose one explicit activation mode:
-  hold modifiers, hold a keyboard shortcut, or toggle a keyboard shortcut.
-  While armed over the selected target screen, vertical wheel input changes
-  zoom and is consumed so the foreground application does not also scroll.
-  Releasing or disarming keeps the chosen magnification and mouse-follow state.
-  Empty bindings and unavailable targets always pass wheel input through.
-  Activation keys are not swallowed, so choose shortcuts that do not conflict
-  with Windows or the foreground application.
-
-- **Reset to Default Zoom (Windows)**
-  Assign either a keyboard chord or a mouse button with exact modifiers to
-  return the live magnification to the configured Zoom Factor while keeping
-  zoom active. Independent wheel adjustments no longer overwrite that saved
-  default. For example, Mouse Middle with Ctrl and Alt resets to a 2x Zoom
-  Factor. Matching mouse chords are consumed to avoid a foreground-app click.
-
-- **Legacy Mouse X2 Wheel Zoom (Windows and X11)**
-  With Mouse X2 in toggle mode and no modifiers, hold the button and scroll to
-  change zoom. Release the button to keep the selected level, or click it
-  without scrolling to reset. The plugin consumes wheel events during the
-  gesture so the application below the pointer does not scroll.
-
-- **Presenter Viewport Guide (Windows)**
-  Optionally outlines the part of the selected screen currently visible in
-  OBS once zoom exceeds a configurable threshold. The click-through outline
-  sits outside the viewport with a small rounding-safe gap and requests Windows
-  capture exclusion so it does not appear in the recording. The included
-  Display Capture source must explicitly use Windows Graphics Capture;
-  Automatic and DXGI Desktop Duplication capture
-  composed overlay windows. Zoominator explains this in its settings and hides
-  the guide by default, with an explicit show-anyway override for workflows
-  where capture leakage is acceptable.
-
----
+Wayland sessions are detected and X11 hooks are disabled. Wayland does not yet
+provide the passive global pointer facilities Zoominator needs for full mouse
+tracking.
 
 ## Installation
 
 ### Windows
-1. Download the latest release
-2. Extract the archive and move the zoominator.dll file into your OBS Studio directory:
+
+1. Close OBS completely.
+2. Back up any existing `zoominator.dll`, plugin data directory, and settings.
+3. Extract the Windows release archive into the OBS installation directory,
+   preserving both top-level directories:
+
+   ```text
+   C:\Program Files\obs-studio\
+   ├── obs-plugins\64bit\zoominator.dll
+   └── data\obs-plugins\zoominator\locale\...
    ```
-   C:\Program Files\obs-studio\obs-plugins\64bit
-   ```
-3. Restart OBS
+
+4. Start OBS and open **Tools → Zoominator**.
+
+User settings are stored separately at:
+
+```text
+%APPDATA%\obs-studio\plugin_config\zoominator\zoominator.json
+```
+
+Replacing the binary and data files does not require deleting that settings
+file. See the [Windows presenter controls guide](docs/windows-presenter-controls.md)
+for setup, verification, and rollback instructions.
 
 ### macOS
-1. Download the `.pkg` or `.dmg` from releases
-2. Install and restart OBS
 
-### Linux (X11)
-1. Build from source or install via package (if available)
-2. Copy plugin files into:
-   ```
-   ~/.config/obs-studio/plugins/
-   ```
-3. Restart OBS
+Install the release `.pkg` or `.dmg`, restart OBS, and grant Accessibility
+permission when prompted for global input tracking.
 
----
+### Linux/X11
 
-## Build from Source
+Install the packaged plugin when available, or build from source and copy the
+result into the OBS plugin directory. A typical per-user location is:
 
-### Requirements
-- OBS Studio development libraries
-- CMake (3.20+ recommended)
-- C++17 compatible compiler
-- Qt6
-
-### Steps
-```bash
-git clone https://github.com/mmlTools/zoominator.git
-cd zoominator
-mkdir build && cd build
-cmake ..
-cmake --build . --config Release
+```text
+~/.config/obs-studio/plugins/
 ```
 
----
+## Quick setup
 
-## Compatibility Notes
+1. Open **Tools → Zoominator**.
+2. Select the target monitor and the scene sources that should participate.
+3. Configure the primary zoom trigger and zoom factor.
+4. On Windows, optionally configure independent wheel zoom and a reset binding
+   in the **Trigger** tab.
+5. Configure wheel sensitivity, limits, mouse following, and the presenter
+   viewport guide in the **Advanced** tab.
+6. Test the complete workflow in the OBS preview before recording or streaming.
 
-- **Windows:** Full support (global input, smooth tracking, independent wheel zoom, reset-to-default keyboard/mouse chords, presenter viewport guide, and legacy Mouse X2 + wheel zoom)
-- **macOS:** Requires Accessibility permissions for input tracking
-- **Linux (X11):** Supported via XInput2
-- **Independent wheel zoom:** Supported on Windows. The current X11 passive
-  Mouse5 grab cannot safely suppress arbitrary modifier/keyboard gestures, and
-  the current macOS event tap is listen-only, so the new activation modes are
-  disabled there rather than allowing both OBS and the foreground application
-  to react. Legacy Mouse X2 wheel zoom remains supported on Windows and X11.
-  Zoom-in/out sensitivity, limits, and animation durations are configured in
-  the Advanced tab.
-- **Presenter viewport guide:** Supported on Windows 10 version 2004 and later,
-  where `WDA_EXCLUDEFROMCAPTURE` can keep the guide out of display capture.
-  Set each included Display Capture source's Capture Method to `Windows 10
-  (1903 and up)` (Windows Graphics Capture). The guide stays hidden with
-  Automatic/DXGI and on other platforms.
-- **Reset to default zoom:** Keyboard and mouse-button bindings are implemented
-  on Windows. Linux/X11 and macOS keep this new binding disabled for now; their
-  existing activation and legacy wheel behavior are unchanged.
-- **Wayland:** Native sessions are detected and X11 hooks are disabled. The
-  Global Shortcuts portal can support hotkeys, but Wayland currently has no
-  standard passive global cursor-position portal, so full mouse tracking still
-  requires compositor-specific input capture support.
+The independent wheel hook consumes vertical wheel input only while its binding
+is armed and the pointer is over the selected target screen. Empty or invalid
+bindings, unsupported platforms, and unavailable targets pass input through.
+Activation keys themselves are not swallowed, so choose combinations that do
+not conflict with Windows or the foreground application.
 
----
+## Presenter viewport guide
 
-## Use Cases
+The Windows guide outlines the portion of the selected display currently
+visible in OBS once zoom exceeds its configured threshold. It is click-through,
+keeps a small transparent gap outside the viewport, and requests
+`WDA_EXCLUDEFROMCAPTURE` from Windows.
 
-- Tutorials & live coding  
-- Product demos  
-- Gameplay & analysis  
-- Vertical / short-form content  
+Windows Graphics Capture is the preferred OBS Display Capture method. Capture
+exclusion remains dependent on Windows, OBS, and the graphics driver, so the
+settings page reports the active compatibility state and asks users to verify
+the result in their preview. Automatic/DXGI sources hide the guide by default;
+**Show anyway when capture exclusion cannot be guaranteed** enables it for
+workflows where the external positioning and safety gap are sufficient.
 
----
+## Building and testing
 
-## Notes
+Requirements:
 
-Zoominator behaves like a **virtual camera system inside OBS**, applying transformations at the scene level for maximum flexibility and reliability.
+- CMake 3.28 or newer.
+- A C++17 compiler.
+- Qt 6 and OBS Studio development dependencies.
+- Windows SDK for Windows builds; X11, XRandR, and XInput2 development packages
+  for Linux builds.
 
-## Clang format fix
+Use the checked-in CMake presets for the host platform:
 
 ```bash
-git add --chmod=+x build-aux/.run-format.zsh build-aux/run-clang-format build-aux/run-gersemi build-aux/run-swift-format build-aux/.functions/*
-git add --renormalize .
-git commit -m "Make build scripts executable and normalize line endings"
+cmake --preset windows-x64
+cmake --build --preset windows-x64
+ctest --test-dir build_x64 -C RelWithDebInfo --output-on-failure
 ```
 
-```gitattributes
-.gitattributes
-*.sh text eol=lf
-*.zsh text eol=lf
-.github/scripts/** text eol=lf
-.functions/* text eol=lf
-run-clang-format text eol=lf
-run-gersemi text eol=lf
-run-swift-format text eol=lf
-.run-format.zsh text eol=lf
-```
+Equivalent presets are `ubuntu-x86_64` and `macos`. CI builds all three
+platforms with warnings treated as errors and packages the resulting artifacts.
 
-```bash
-git add --renormalize .
-git commit -m "Normalize line endings for Unix scripts"
-git push
-```
+## Troubleshooting
+
+- Confirm the plugin loaded in **Help → Log Files → View Current Log** and look
+  for `[zoominator] [Zoominator] loaded`.
+- If wheel zoom passes through, check its status in the Trigger tab, confirm a
+  non-empty binding, and ensure the pointer is over the selected target screen.
+- If the viewport guide is hidden, read the compatibility message in Advanced
+  settings. Switch the source capture method or deliberately enable the
+  show-anyway override.
+- If an upgrade behaves unexpectedly, close OBS and restore the DLL and plugin
+  data from the same backup set. Restore the JSON settings only when rolling
+  configuration back intentionally.
+
+## Contributing
+
+Keep platform-specific behaviour guarded, preserve input pass-through when a
+binding cannot be honoured, and add deterministic coverage for state-machine or
+geometry changes. Run the relevant local build and tests before opening a pull
+request; the GitHub Actions matrix is the final Windows, Ubuntu, and macOS build
+gate.
+
+See [CHANGELOG.md](CHANGELOG.md) for the current development changes.
+
+## License
+
+Zoominator is distributed under the [GNU General Public License v2.0](LICENSE).
