@@ -103,6 +103,7 @@ void ZoominatorController::adjustActiveZoomFromWheel(int direction, int steps)
 	const bool wasActive = zoomActive.load(std::memory_order_acquire);
 	const double delta = direction > 0 ? wheelZoomInStep * steps : -wheelZoomOutStep * steps;
 	zoomFactor = clampd(zoomFactor + delta, wheelZoomMinimum, wheelZoomMaximum);
+	activeZoomFactor = zoomFactor;
 	zoomAdjustedDuringButtonHold = true;
 	if (zoomFactor > 1.0) {
 		if (!wasActive || animDir.load(std::memory_order_relaxed) < 0) {
@@ -128,6 +129,7 @@ void ZoominatorController::finishWheelZoomGesture()
 		return;
 
 	zoomFactor = 1.0;
+	activeZoomFactor = zoomFactor;
 	zoomLatched = false;
 	startZoomOut();
 	scheduleSettingsSave();
@@ -668,6 +670,13 @@ void ZoominatorController::loadSettings()
 
 	hotkeySequence = QStringLiteral("Ctrl+F1");
 	hotkeyMode = QStringLiteral("hold");
+	resetZoomTriggerType = QStringLiteral("keyboard");
+	resetZoomHotkeySequence.clear();
+	resetZoomMouseButton = QStringLiteral("middle");
+	resetZoomModCtrl = true;
+	resetZoomModAlt = true;
+	resetZoomModShift = false;
+	resetZoomModMeta = false;
 
 	triggerType = QStringLiteral("keyboard");
 	mouseButton = QStringLiteral("x1");
@@ -685,6 +694,7 @@ void ZoominatorController::loadSettings()
 	modRightWin = false;
 
 	zoomFactor = 2.0;
+	activeZoomFactor = zoomFactor;
 	wheelZoomInStep = 0.20;
 	wheelZoomOutStep = 0.20;
 	wheelZoomMinimum = 1.0;
@@ -738,6 +748,22 @@ void ZoominatorController::loadSettings()
 		hotkeySequence = QStringLiteral("Ctrl+F1");
 	hotkeyMode = getStr("hotkey_mode");
 	followToggleHotkeySequence = getStr("follow_toggle_hotkey");
+	resetZoomTriggerType = getStr("reset_zoom_trigger_type");
+	if (resetZoomTriggerType != QLatin1String("mouse"))
+		resetZoomTriggerType = QStringLiteral("keyboard");
+	resetZoomHotkeySequence = getStr("reset_zoom_hotkey");
+	resetZoomMouseButton = getStr("reset_zoom_mouse_button");
+	if (resetZoomMouseButton != QLatin1String("left") && resetZoomMouseButton != QLatin1String("right") &&
+	    resetZoomMouseButton != QLatin1String("x1") && resetZoomMouseButton != QLatin1String("x2"))
+		resetZoomMouseButton = QStringLiteral("middle");
+	if (obs_data_has_user_value(data, "reset_zoom_mod_ctrl"))
+		resetZoomModCtrl = obs_data_get_bool(data, "reset_zoom_mod_ctrl");
+	if (obs_data_has_user_value(data, "reset_zoom_mod_alt"))
+		resetZoomModAlt = obs_data_get_bool(data, "reset_zoom_mod_alt");
+	if (obs_data_has_user_value(data, "reset_zoom_mod_shift"))
+		resetZoomModShift = obs_data_get_bool(data, "reset_zoom_mod_shift");
+	if (obs_data_has_user_value(data, "reset_zoom_mod_meta"))
+		resetZoomModMeta = obs_data_get_bool(data, "reset_zoom_mod_meta");
 	if (hotkeyMode != "toggle")
 		hotkeyMode = "hold";
 
@@ -849,6 +875,7 @@ void ZoominatorController::loadSettings()
 
 	if (zoomFactor < 0.0)
 		zoomFactor = 0.0;
+	activeZoomFactor = zoomFactor;
 	if (obs_data_has_user_value(data, "wheel_zoom_in_step"))
 		wheelZoomInStep = obs_data_get_double(data, "wheel_zoom_in_step");
 	if (obs_data_has_user_value(data, "wheel_zoom_out_step"))
@@ -990,6 +1017,13 @@ void ZoominatorController::saveSettings()
 	obs_data_set_string(data, "hotkey", hotkeySequence.toUtf8().constData());
 	obs_data_set_string(data, "hotkey_mode", hotkeyMode.toUtf8().constData());
 	obs_data_set_string(data, "follow_toggle_hotkey", followToggleHotkeySequence.toUtf8().constData());
+	obs_data_set_string(data, "reset_zoom_trigger_type", resetZoomTriggerType.toUtf8().constData());
+	obs_data_set_string(data, "reset_zoom_hotkey", resetZoomHotkeySequence.toUtf8().constData());
+	obs_data_set_string(data, "reset_zoom_mouse_button", resetZoomMouseButton.toUtf8().constData());
+	obs_data_set_bool(data, "reset_zoom_mod_ctrl", resetZoomModCtrl);
+	obs_data_set_bool(data, "reset_zoom_mod_alt", resetZoomModAlt);
+	obs_data_set_bool(data, "reset_zoom_mod_shift", resetZoomModShift);
+	obs_data_set_bool(data, "reset_zoom_mod_meta", resetZoomModMeta);
 
 	obs_data_set_string(data, "trigger_type", triggerType.toUtf8().constData());
 	obs_data_set_string(data, "mouse_button", mouseButton.toUtf8().constData());
@@ -1072,6 +1106,7 @@ void ZoominatorController::saveSettings()
 
 void ZoominatorController::rebuildRuntimeHooks()
 {
+	activeZoomFactor = zoomFactor;
 	rebuildTriggersFromSettings();
 	uninstallHooks();
 	installHooks();
@@ -3112,11 +3147,11 @@ void ZoominatorController::videoTick(double seconds)
 	 * approaches it exponentially. This keeps consecutive notches fluid and
 	 * remains frame-rate independent. The normal zoom-out animation owns the
 	 * path back to 1x, so do not also shrink the target during that animation. */
-	if (dir >= 0 && zoomFactor > 1.0) {
+	if (dir >= 0 && activeZoomFactor > 1.0) {
 		const double response = 1.0 - std::exp(-kWheelZoomSmoothingRate * tickDeltaSeconds);
-		renderedZoomFactor += (zoomFactor - renderedZoomFactor) * response;
-		if (std::fabs(zoomFactor - renderedZoomFactor) < 0.0001)
-			renderedZoomFactor = zoomFactor;
+		renderedZoomFactor += (activeZoomFactor - renderedZoomFactor) * response;
+		if (std::fabs(activeZoomFactor - renderedZoomFactor) < 0.0001)
+			renderedZoomFactor = activeZoomFactor;
 	}
 	const int dur = (dir >= 0) ? animInMs : animOutMs;
 	animT += (double)dir * (tickDeltaSeconds * 1000.0) / (double)std::max(1, dur);
@@ -3417,6 +3452,14 @@ LRESULT CALLBACK ZoominatorController::kb_hook_proc(int nCode, WPARAM wParam, LP
 			g_ctl->toggleFollowMouseRuntime();
 		}
 
+		if (g_ctl->resetZoomBindingValid && g_ctl->resetZoomTriggerType == QLatin1String("keyboard") && down &&
+		    g_ctl->resetZoomHotkeyVk != 0 && vk_matches(vk, g_ctl->resetZoomHotkeyVk) &&
+		    mods_current(g_ctl->resetZoomModCtrl, g_ctl->resetZoomModAlt, g_ctl->resetZoomModShift,
+				 g_ctl->resetZoomModMeta)) {
+			QMetaObject::invokeMethod(
+				g_ctl, [ctl = g_ctl]() { ctl->resetToDefaultZoom(); }, Qt::QueuedConnection);
+		}
+
 		if (!(g_ctl->hkValid && g_ctl->triggerType == "keyboard"))
 			return CallNextHookEx((HHOOK)g_ctl->keyboardHook, nCode, wParam, lParam);
 
@@ -3472,6 +3515,15 @@ LRESULT CALLBACK ZoominatorController::mouse_hook_proc(int nCode, WPARAM wParam,
 		const bool up = (wParam == WM_LBUTTONUP || wParam == WM_RBUTTONUP || wParam == WM_MBUTTONUP ||
 				 wParam == WM_XBUTTONUP);
 		const unsigned short mouseData = (unsigned short)HIWORD(m->mouseData);
+
+		if (g_ctl->resetZoomBindingValid && g_ctl->resetZoomTriggerType == QLatin1String("mouse") && down &&
+		    g_ctl->resetTriggerMatchesMouse((unsigned int)wParam, mouseData) &&
+		    mods_current(g_ctl->resetZoomModCtrl, g_ctl->resetZoomModAlt, g_ctl->resetZoomModShift,
+				 g_ctl->resetZoomModMeta)) {
+			QMetaObject::invokeMethod(
+				g_ctl, [ctl = g_ctl]() { ctl->resetToDefaultZoom(); }, Qt::QueuedConnection);
+			return 1;
+		}
 
 		/* Independent wheel zoom is routed first so an overlapping legacy X2
 		 * gesture cannot execute the same wheel movement twice. */
@@ -3923,11 +3975,33 @@ bool ZoominatorController::triggerMatchesMouse(unsigned int msg, unsigned short 
 #endif
 }
 
+bool ZoominatorController::resetTriggerMatchesMouse(unsigned int msg, unsigned short mouseData) const
+{
+#ifdef _WIN32
+	const QString b = resetZoomMouseButton;
+	if (b == "left")
+		return msg == WM_LBUTTONDOWN;
+	if (b == "right")
+		return msg == WM_RBUTTONDOWN;
+	if (b == "middle")
+		return msg == WM_MBUTTONDOWN;
+	if (b == "x1")
+		return msg == WM_XBUTTONDOWN && mouseData == XBUTTON1;
+	if (b == "x2")
+		return msg == WM_XBUTTONDOWN && mouseData == XBUTTON2;
+#else
+	(void)msg;
+	(void)mouseData;
+#endif
+	return false;
+}
+
 void ZoominatorController::onTriggerDown()
 {
 	if (debug)
 		blog(LOG_INFO, "[Zoominator] Trigger DOWN");
 
+	activeZoomFactor = zoomFactor;
 	if (hotkeyMode == "toggle") {
 		zoomLatched = !zoomLatched;
 		if (zoomLatched) {
@@ -3950,6 +4024,28 @@ void ZoominatorController::onTriggerDown()
 	mouseTrackingIdle = false;
 	targetHasPos = false;
 	startZoomIn();
+}
+
+void ZoominatorController::resetToDefaultZoom()
+{
+	activeZoomFactor = std::max(1.0, zoomFactor);
+	zoomLatched = true;
+	zoomPressed = false;
+	followHasPos = false;
+	lastCursorSampleValid = false;
+	lastCursorMovementMs = 0;
+	mouseTrackingIdle = false;
+	targetHasPos = false;
+	if (!zoomActive.load(std::memory_order_acquire)) {
+		renderedZoomFactor = 1.0;
+		animT = 0.0;
+	}
+	if (activeZoomFactor <= 1.0)
+		startZoomOut();
+	else
+		startZoomIn();
+	if (debug)
+		blog(LOG_INFO, "[Zoominator] Reset zoom to configured default %.2fx", activeZoomFactor);
 }
 
 void ZoominatorController::onTriggerUp()
@@ -4246,6 +4342,8 @@ void ZoominatorController::rebuildTriggersFromSettings()
 {
 	hkValid = false;
 	hotkeyVk = 0;
+	resetZoomBindingValid = false;
+	resetZoomHotkeyVk = 0;
 	followToggleHkValid = false;
 	followToggleHotkeyVk = 0;
 	followToggleModCtrl = false;
@@ -4454,6 +4552,24 @@ void ZoominatorController::rebuildTriggersFromSettings()
 	} else {
 		hkValid = true;
 	}
+
+#ifdef _WIN32
+	if (resetZoomTriggerType == QLatin1String("mouse")) {
+		resetZoomBindingValid = !resetZoomMouseButton.isEmpty();
+	} else {
+		QKeySequence resetSequence(resetZoomHotkeySequence);
+		if (!resetSequence.isEmpty() && resetSequence.count() == 1) {
+			const QKeyCombination combination = resetSequence[0];
+			resetZoomHotkeyVk = qtKeyToVk(int(combination.key()));
+			const auto modifiers = combination.keyboardModifiers();
+			resetZoomModCtrl = modifiers.testFlag(Qt::ControlModifier);
+			resetZoomModAlt = modifiers.testFlag(Qt::AltModifier);
+			resetZoomModShift = modifiers.testFlag(Qt::ShiftModifier);
+			resetZoomModMeta = modifiers.testFlag(Qt::MetaModifier);
+			resetZoomBindingValid = resetZoomHotkeyVk != 0 && !is_modifier_vk(resetZoomHotkeyVk);
+		}
+	}
+#endif
 
 	rebuildIndependentWheelBinding();
 }
@@ -4666,13 +4782,13 @@ void ZoominatorController::applyIndependentWheelSteps(int steps)
 	if (steps == 0)
 		return;
 	const bool active = zoomActive.load(std::memory_order_acquire);
-	const double current = active ? std::max(1.0, zoomFactor) : 1.0;
-	const double next = computeWheelZoomTarget(zoomFactor, active, steps, wheelZoomInStep, wheelZoomOutStep,
+	const double current = active ? std::max(1.0, activeZoomFactor) : 1.0;
+	const double next = computeWheelZoomTarget(activeZoomFactor, active, steps, wheelZoomInStep, wheelZoomOutStep,
 						   wheelZoomMinimum, wheelZoomMaximum);
 	if (std::fabs(next - current) < 0.000001)
 		return;
 
-	zoomFactor = next;
+	activeZoomFactor = next;
 	if (next <= 1.0) {
 		if (active)
 			startZoomOut();
@@ -4683,18 +4799,19 @@ void ZoominatorController::applyIndependentWheelSteps(int steps)
 	} else if (animDir.load(std::memory_order_relaxed) < 0) {
 		startZoomIn();
 	}
-	scheduleSettingsSave();
 	emit settingsChanged();
 }
 
 bool ZoominatorController::needsKeyboardHook() const
 {
-	return triggerType == "keyboard" || followToggleHkValid || independentWheelZoomBindingValid();
+	return triggerType == "keyboard" || followToggleHkValid || independentWheelZoomBindingValid() ||
+	       (resetZoomBindingValid && resetZoomTriggerType == QLatin1String("keyboard"));
 }
 
 bool ZoominatorController::needsMouseHook() const
 {
-	return triggerType == "mouse" || showCursorMarker || independentWheelZoomBindingValid();
+	return triggerType == "mouse" || showCursorMarker || independentWheelZoomBindingValid() ||
+	       (resetZoomBindingValid && resetZoomTriggerType == QLatin1String("mouse"));
 }
 
 void ZoominatorController::installHooks()

@@ -42,6 +42,13 @@ It operates at the **scene level**, meaning it works with any source automatical
   Activation keys are not swallowed, so choose shortcuts that do not conflict
   with Windows or the foreground application.
 
+- **Reset to Default Zoom (Windows)**
+  Assign either a keyboard chord or a mouse button with exact modifiers to
+  return the live magnification to the configured Zoom Factor while keeping
+  zoom active. Independent wheel adjustments no longer overwrite that saved
+  default. For example, Mouse Middle with Ctrl and Alt resets to a 2x Zoom
+  Factor. Matching mouse chords are consumed to avoid a foreground-app click.
+
 - **Legacy Mouse X2 Wheel Zoom (Windows and X11)**
   With Mouse X2 in toggle mode and no modifiers, hold the button and scroll to
   change zoom. Release the button to keep the selected level, or click it
@@ -101,7 +108,7 @@ cmake --build . --config Release
 
 ## Compatibility Notes
 
-- **Windows:** Full support (global input, smooth tracking, independent wheel zoom, presenter viewport guide, and legacy Mouse X2 + wheel zoom)
+- **Windows:** Full support (global input, smooth tracking, independent wheel zoom, reset-to-default keyboard/mouse chords, presenter viewport guide, and legacy Mouse X2 + wheel zoom)
 - **macOS:** Requires Accessibility permissions for input tracking
 - **Linux (X11):** Supported via XInput2
 - **Independent wheel zoom:** Supported on Windows. The current X11 passive
@@ -114,6 +121,9 @@ cmake --build . --config Release
 - **Presenter viewport guide:** Supported on Windows 10 version 2004 and later,
   where `WDA_EXCLUDEFROMCAPTURE` can keep the guide out of display capture.
   Other platforms currently leave the guide hidden.
+- **Reset to default zoom:** Keyboard and mouse-button bindings are implemented
+  on Windows. Linux/X11 and macOS keep this new binding disabled for now; their
+  existing activation and legacy wheel behavior are unchanged.
 - **Wayland:** Native sessions are detected and X11 hooks are disabled. The
   Global Shortcuts portal can support hotkeys, but Wayland currently has no
   standard passive global cursor-position portal, so full mouse tracking still

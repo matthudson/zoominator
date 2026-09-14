@@ -70,6 +70,13 @@ public:
 	QString hotkeySequence;
 	QString hotkeyMode;
 	QString followToggleHotkeySequence;
+	QString resetZoomTriggerType = QStringLiteral("keyboard");
+	QString resetZoomHotkeySequence;
+	QString resetZoomMouseButton = QStringLiteral("middle");
+	bool resetZoomModCtrl = true;
+	bool resetZoomModAlt = true;
+	bool resetZoomModShift = false;
+	bool resetZoomModMeta = false;
 
 	QString triggerType;
 	QString mouseButton;
@@ -166,9 +173,11 @@ private:
 	void processIndependentWheelDelta(uint64_t generation);
 	void queueIndependentWheelStatusUpdate();
 	void applyIndependentWheelSteps(int steps);
+	void resetToDefaultZoom();
 	void toggleFollowMouseRuntime();
 	bool triggerMatchesKeyboard(int vk) const;
 	bool triggerMatchesMouse(unsigned int msg, unsigned short mouseData) const;
+	bool resetTriggerMatchesMouse(unsigned int msg, unsigned short mouseData) const;
 	bool modsMatch() const;
 
 	bool getSelectedScreenRect(int &x, int &y, int &w, int &h) const;
@@ -268,6 +277,7 @@ private:
 
 	double animT = 0.0;
 	double renderedZoomFactor = 1.0;
+	double activeZoomFactor = 2.0;
 	std::atomic<int> animDir{0};
 
 	bool followHasPos = false;
@@ -356,6 +366,8 @@ private:
 	bool followToggleModShift = false;
 	bool followToggleModWin = false;
 	int independentWheelShortcutVk = 0;
+	int resetZoomHotkeyVk = 0;
+	bool resetZoomBindingValid = false;
 
 #ifdef _WIN32
 	static LRESULT CALLBACK kb_hook_proc(int nCode, WPARAM wParam, LPARAM lParam);

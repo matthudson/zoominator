@@ -348,6 +348,48 @@ void ZoominatorDialog::buildUi()
 		lblWheelZoomStatus->setWordWrap(true);
 		lay->addWidget(lblWheelZoomStatus);
 
+		addSection(lay, T("Dialog.Section.ResetZoom"));
+		cmbResetZoomTrigger = new QComboBox(page);
+		cmbResetZoomTrigger->addItem(T("Dialog.Trigger.Keyboard"), "keyboard");
+		cmbResetZoomTrigger->addItem(T("Dialog.Trigger.MouseButton"), "mouse");
+		lay->addWidget(mkField(T("Dialog.ResetZoom.Trigger"), cmbResetZoomTrigger));
+
+		rowResetZoomHotkeyWidget = new QWidget(page);
+		{
+			auto *h = new QHBoxLayout(rowResetZoomHotkeyWidget);
+			h->setContentsMargins(0, 0, 0, 0);
+			editResetZoomHotkey = new QKeySequenceEdit(rowResetZoomHotkeyWidget);
+			btnClearResetZoomHotkey = new QPushButton(T("Dialog.Clear"), rowResetZoomHotkeyWidget);
+			h->addWidget(editResetZoomHotkey, 1);
+			h->addWidget(btnClearResetZoomHotkey);
+		}
+		lay->addWidget(rowResetZoomHotkeyWidget);
+
+		rowResetZoomMouseWidget = new QWidget(page);
+		{
+			auto *h = new QHBoxLayout(rowResetZoomMouseWidget);
+			h->setContentsMargins(0, 0, 0, 0);
+			cmbResetZoomMouseBtn = new QComboBox(rowResetZoomMouseWidget);
+			cmbResetZoomMouseBtn->addItem(T("Dialog.Mouse.Left"), "left");
+			cmbResetZoomMouseBtn->addItem(T("Dialog.Mouse.Right"), "right");
+			cmbResetZoomMouseBtn->addItem(T("Dialog.Mouse.Middle"), "middle");
+			cmbResetZoomMouseBtn->addItem("X1", "x1");
+			cmbResetZoomMouseBtn->addItem("X2", "x2");
+			chkResetZoomCtrl = new QCheckBox(T("Dialog.Mod.CtrlAny"), rowResetZoomMouseWidget);
+			chkResetZoomAlt = new QCheckBox(T("Dialog.Mod.AltAny"), rowResetZoomMouseWidget);
+			chkResetZoomShift = new QCheckBox(T("Dialog.Mod.ShiftAny"), rowResetZoomMouseWidget);
+			chkResetZoomMeta = new QCheckBox(T("Dialog.Mod.MetaWinAny"), rowResetZoomMouseWidget);
+			h->addWidget(cmbResetZoomMouseBtn, 1);
+			h->addWidget(chkResetZoomCtrl);
+			h->addWidget(chkResetZoomAlt);
+			h->addWidget(chkResetZoomShift);
+			h->addWidget(chkResetZoomMeta);
+		}
+		lay->addWidget(rowResetZoomMouseWidget);
+		auto *resetHelp = new QLabel(T("Dialog.ResetZoom.Help"), page);
+		resetHelp->setWordWrap(true);
+		lay->addWidget(resetHelp);
+
 		lay->addStretch(1);
 		tabWidget->addTab(page, T("Dialog.Tab.Trigger"));
 
@@ -360,6 +402,11 @@ void ZoominatorDialog::buildUi()
 		connect(chkIndependentWheelZoom, &QCheckBox::toggled, this, [this](bool) { updateWheelZoomUi(); });
 		connect(cmbWheelZoomActivation, &QComboBox::currentIndexChanged, this,
 			[this](int) { updateWheelZoomUi(); });
+		connect(cmbResetZoomTrigger, &QComboBox::currentIndexChanged, this, [this](int) {
+			const bool mouse = cmbResetZoomTrigger->currentData().toString() == QLatin1String("mouse");
+			rowResetZoomHotkeyWidget->setVisible(!mouse);
+			rowResetZoomMouseWidget->setVisible(mouse);
+		});
 	}
 
 	{
@@ -590,6 +637,7 @@ void ZoominatorDialog::buildUi()
 	connect(btnClearHotkey, &QPushButton::clicked, this, &ZoominatorDialog::clearHotkey);
 	connect(btnClearFollowToggleHotkey, &QPushButton::clicked, this, &ZoominatorDialog::clearFollowToggleHotkey);
 	connect(btnClearWheelZoomShortcut, &QPushButton::clicked, this, &ZoominatorDialog::clearWheelZoomShortcut);
+	connect(btnClearResetZoomHotkey, &QPushButton::clicked, this, &ZoominatorDialog::clearResetZoomHotkey);
 	connect(btnMarkerColor, &QPushButton::clicked, this, &ZoominatorDialog::chooseMarkerColor);
 	connect(chkShowCursorMarker, &QCheckBox::toggled, chkShowMarkerWhenNotZoomed, &QWidget::setEnabled);
 }
@@ -785,6 +833,19 @@ void ZoominatorDialog::loadFromController()
 		chkWheelLeftMeta->setChecked(c.wheelModLeftMeta);
 		chkWheelRightMeta->setChecked(c.wheelModRightMeta);
 		updateWheelZoomUi();
+
+		idx = cmbResetZoomTrigger->findData(c.resetZoomTriggerType);
+		cmbResetZoomTrigger->setCurrentIndex(idx >= 0 ? idx : 0);
+		editResetZoomHotkey->setKeySequence(QKeySequence(c.resetZoomHotkeySequence));
+		idx = cmbResetZoomMouseBtn->findData(c.resetZoomMouseButton);
+		cmbResetZoomMouseBtn->setCurrentIndex(idx >= 0 ? idx : 2);
+		chkResetZoomCtrl->setChecked(c.resetZoomModCtrl);
+		chkResetZoomAlt->setChecked(c.resetZoomModAlt);
+		chkResetZoomShift->setChecked(c.resetZoomModShift);
+		chkResetZoomMeta->setChecked(c.resetZoomModMeta);
+		const bool resetMouse = c.resetZoomTriggerType == QLatin1String("mouse");
+		rowResetZoomHotkeyWidget->setVisible(!resetMouse);
+		rowResetZoomMouseWidget->setVisible(resetMouse);
 	}
 
 	{
@@ -853,6 +914,13 @@ void ZoominatorDialog::applyToController()
 	c.independentWheelZoomEnabled = chkIndependentWheelZoom->isChecked();
 	c.independentWheelActivationMode = cmbWheelZoomActivation->currentData().toString();
 	c.independentWheelShortcutSequence = editWheelZoomShortcut->keySequence().toString(QKeySequence::NativeText);
+	c.resetZoomTriggerType = cmbResetZoomTrigger->currentData().toString();
+	c.resetZoomHotkeySequence = editResetZoomHotkey->keySequence().toString(QKeySequence::NativeText);
+	c.resetZoomMouseButton = cmbResetZoomMouseBtn->currentData().toString();
+	c.resetZoomModCtrl = chkResetZoomCtrl->isChecked();
+	c.resetZoomModAlt = chkResetZoomAlt->isChecked();
+	c.resetZoomModShift = chkResetZoomShift->isChecked();
+	c.resetZoomModMeta = chkResetZoomMeta->isChecked();
 	c.wheelModCtrl = chkWheelCtrl->isChecked();
 	c.wheelModAlt = chkWheelAlt->isChecked();
 	c.wheelModShift = chkWheelShift->isChecked();
@@ -923,6 +991,11 @@ void ZoominatorDialog::clearFollowToggleHotkey()
 void ZoominatorDialog::clearWheelZoomShortcut()
 {
 	editWheelZoomShortcut->setKeySequence(QKeySequence());
+}
+
+void ZoominatorDialog::clearResetZoomHotkey()
+{
+	editResetZoomHotkey->setKeySequence(QKeySequence());
 }
 
 void ZoominatorDialog::updateWheelZoomUi()

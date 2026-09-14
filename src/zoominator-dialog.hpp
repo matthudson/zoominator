@@ -30,6 +30,7 @@ private slots:
 	void clearHotkey();
 	void clearFollowToggleHotkey();
 	void clearWheelZoomShortcut();
+	void clearResetZoomHotkey();
 	void chooseMarkerColor();
 	void populateSourcesTab();
 
@@ -83,6 +84,14 @@ private:
 	QCheckBox *chkWheelLeftMeta = nullptr;
 	QCheckBox *chkWheelRightMeta = nullptr;
 	QLabel *lblWheelZoomStatus = nullptr;
+	QComboBox *cmbResetZoomTrigger = nullptr;
+	QKeySequenceEdit *editResetZoomHotkey = nullptr;
+	QPushButton *btnClearResetZoomHotkey = nullptr;
+	QComboBox *cmbResetZoomMouseBtn = nullptr;
+	QCheckBox *chkResetZoomCtrl = nullptr;
+	QCheckBox *chkResetZoomAlt = nullptr;
+	QCheckBox *chkResetZoomShift = nullptr;
+	QCheckBox *chkResetZoomMeta = nullptr;
 
 	QDoubleSpinBox *spZoom = nullptr;
 	QDoubleSpinBox *spWheelZoomInStep = nullptr;
@@ -118,6 +127,8 @@ private:
 	QWidget *rowModifiersWidget = nullptr;
 	QWidget *rowWheelModifiersWidget = nullptr;
 	QWidget *rowWheelShortcutWidget = nullptr;
+	QWidget *rowResetZoomHotkeyWidget = nullptr;
+	QWidget *rowResetZoomMouseWidget = nullptr;
 
 	bool loading = false;
 };
