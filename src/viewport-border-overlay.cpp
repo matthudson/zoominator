@@ -43,6 +43,7 @@ bool ViewportBorderOverlay::ensureCaptureExcluded(bool force)
 	captureExclusionWindowId = windowId;
 	return captureExclusionReady;
 #else
+	(void)force;
 	return false;
 #endif
 }
