@@ -21,45 +21,48 @@ ViewportBorderOverlay::ViewportBorderOverlay()
 	setAutoFillBackground(true);
 }
 
-bool ViewportBorderOverlay::ensureCaptureExcluded()
+bool ViewportBorderOverlay::ensureCaptureExcluded(bool force)
 {
 #ifdef _WIN32
-	if (captureExclusionReady)
-		return true;
-	if (captureExclusionFailed)
-		return false;
 	const QOperatingSystemVersion version = QOperatingSystemVersion::current();
-	if (version.majorVersion() < 10 || (version.majorVersion() == 10 && version.microVersion() < 19041)) {
-		captureExclusionFailed = true;
+	if (version.majorVersion() < 10 || (version.majorVersion() == 10 && version.microVersion() < 19041))
 		return false;
-	}
 
 	HWND hwnd = reinterpret_cast<HWND>(winId());
-	if (!hwnd) {
-		captureExclusionFailed = true;
+	if (!hwnd)
 		return false;
-	}
+	const quintptr windowId = reinterpret_cast<quintptr>(hwnd);
+	if (!force && captureExclusionReady && captureExclusionWindowId == windowId)
+		return true;
 
 	LONG_PTR style = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
 	SetWindowLongPtrW(hwnd, GWL_EXSTYLE, style | WS_EX_TRANSPARENT | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW);
-	captureExclusionReady = SetWindowDisplayAffinity(hwnd, WDA_EXCLUDEFROMCAPTURE) != FALSE;
-	captureExclusionFailed = !captureExclusionReady;
+	DWORD affinity = WDA_NONE;
+	captureExclusionReady = SetWindowDisplayAffinity(hwnd, WDA_EXCLUDEFROMCAPTURE) != FALSE &&
+				GetWindowDisplayAffinity(hwnd, &affinity) != FALSE && affinity == WDA_EXCLUDEFROMCAPTURE;
+	captureExclusionWindowId = windowId;
 	return captureExclusionReady;
 #else
-	captureExclusionFailed = true;
 	return false;
 #endif
 }
 
-bool ViewportBorderOverlay::showViewport(const QRect &viewport, int thickness, const QColor &color)
+bool ViewportBorderOverlay::showViewport(const QRect &viewport, int thickness, const QColor &color,
+					 bool allowWithoutCaptureExclusion)
 {
-	if (!viewport.isValid() || thickness <= 0 || !ensureCaptureExcluded()) {
+	if (!viewport.isValid() || thickness <= 0 ||
+	    (!ensureCaptureExcluded() && !allowWithoutCaptureExclusion)) {
 		hideViewport();
 		return false;
 	}
 
-	const QRect outer = viewport.adjusted(-thickness, -thickness, thickness, thickness);
-	const QRect inner(QPoint(thickness, thickness), viewport.size());
+	/* Keep the guide just outside the computed viewport. The small transparent
+	 * gap absorbs integer rounding and Windows display-scaling differences. */
+	constexpr int safetyPadding = 2;
+	const int outside = thickness + safetyPadding;
+	const QRect outer = viewport.adjusted(-outside, -outside, outside, outside);
+	const QRect inner(QPoint(thickness, thickness),
+			  viewport.size() + QSize(safetyPadding * 2, safetyPadding * 2));
 	QRegion ring(QRect(QPoint(0, 0), outer.size()));
 	ring = ring.subtracted(QRegion(inner));
 
@@ -74,6 +77,12 @@ bool ViewportBorderOverlay::showViewport(const QRect &viewport, int thickness, c
 #ifdef _WIN32
 	SetWindowPos(reinterpret_cast<HWND>(winId()), HWND_TOPMOST, 0, 0, 0, 0,
 		     SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
+	/* Showing a Qt top-level widget may recreate its native window. Reapply and
+	 * read back the affinity on the final HWND before leaving it visible. */
+	if (!ensureCaptureExcluded(true) && !allowWithoutCaptureExclusion) {
+		hideViewport();
+		return false;
+	}
 #endif
 	return true;
 }

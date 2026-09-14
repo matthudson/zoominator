@@ -8,11 +8,12 @@ class ViewportBorderOverlay final : public QWidget {
 public:
 	explicit ViewportBorderOverlay();
 
-	bool showViewport(const QRect &viewport, int thickness, const QColor &color);
+	bool showViewport(const QRect &viewport, int thickness, const QColor &color,
+			  bool allowWithoutCaptureExclusion = false);
 	void hideViewport();
 
 private:
-	bool ensureCaptureExcluded();
+	bool ensureCaptureExcluded(bool force = false);
 	bool captureExclusionReady = false;
-	bool captureExclusionFailed = false;
+	quintptr captureExclusionWindowId = 0;
 };

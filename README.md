@@ -58,9 +58,10 @@ It operates at the **scene level**, meaning it works with any source automatical
 - **Presenter Viewport Guide (Windows)**
   Optionally outlines the part of the selected screen currently visible in
   OBS once zoom exceeds a configurable threshold. The click-through outline
-  sits outside the viewport and uses Windows capture exclusion so it does not
-  appear in the recording. The included Display Capture source must explicitly
-  use Windows Graphics Capture; Automatic and DXGI Desktop Duplication capture
+  sits outside the viewport with a small rounding-safe gap and requests Windows
+  capture exclusion so it does not appear in the recording. The included
+  Display Capture source must explicitly use Windows Graphics Capture;
+  Automatic and DXGI Desktop Duplication capture
   composed overlay windows. Zoominator explains this in its settings and hides
   the guide by default, with an explicit show-anyway override for workflows
   where capture leakage is acceptable.
