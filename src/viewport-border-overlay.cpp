@@ -39,7 +39,8 @@ bool ViewportBorderOverlay::ensureCaptureExcluded(bool force)
 	SetWindowLongPtrW(hwnd, GWL_EXSTYLE, style | WS_EX_TRANSPARENT | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW);
 	DWORD affinity = WDA_NONE;
 	captureExclusionReady = SetWindowDisplayAffinity(hwnd, WDA_EXCLUDEFROMCAPTURE) != FALSE &&
-				GetWindowDisplayAffinity(hwnd, &affinity) != FALSE && affinity == WDA_EXCLUDEFROMCAPTURE;
+				GetWindowDisplayAffinity(hwnd, &affinity) != FALSE &&
+				affinity == WDA_EXCLUDEFROMCAPTURE;
 	captureExclusionWindowId = windowId;
 	return captureExclusionReady;
 #else
@@ -51,8 +52,7 @@ bool ViewportBorderOverlay::ensureCaptureExcluded(bool force)
 bool ViewportBorderOverlay::showViewport(const QRect &viewport, int thickness, const QColor &color,
 					 bool allowWithoutCaptureExclusion)
 {
-	if (!viewport.isValid() || thickness <= 0 ||
-	    (!ensureCaptureExcluded() && !allowWithoutCaptureExclusion)) {
+	if (!viewport.isValid() || thickness <= 0 || (!ensureCaptureExcluded() && !allowWithoutCaptureExclusion)) {
 		hideViewport();
 		return false;
 	}
@@ -62,8 +62,7 @@ bool ViewportBorderOverlay::showViewport(const QRect &viewport, int thickness, c
 	constexpr int safetyPadding = 2;
 	const int outside = thickness + safetyPadding;
 	const QRect outer = viewport.adjusted(-outside, -outside, outside, outside);
-	const QRect inner(QPoint(thickness, thickness),
-			  viewport.size() + QSize(safetyPadding * 2, safetyPadding * 2));
+	const QRect inner(QPoint(thickness, thickness), viewport.size() + QSize(safetyPadding * 2, safetyPadding * 2));
 	QRegion ring(QRect(QPoint(0, 0), outer.size()));
 	ring = ring.subtracted(QRegion(inner));
 

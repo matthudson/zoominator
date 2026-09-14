@@ -13,10 +13,9 @@ include(helpers)
 
 add_library(${CMAKE_PROJECT_NAME} MODULE)
 
-set_target_properties(${CMAKE_PROJECT_NAME} PROPERTIES
-  C_STANDARD 11
-  CXX_STANDARD 17
-  CXX_STANDARD_REQUIRED YES
+set_target_properties(
+  ${CMAKE_PROJECT_NAME}
+  PROPERTIES C_STANDARD 11 CXX_STANDARD 17 CXX_STANDARD_REQUIRED YES
 )
 
 find_package(libobs REQUIRED)
@@ -41,10 +40,9 @@ if(ENABLE_QT)
 endif()
 
 if(APPLE)
-  target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE
-    "-framework ApplicationServices"
-    "-framework CoreFoundation"
-    "-framework CoreGraphics"
+  target_link_libraries(
+    ${CMAKE_PROJECT_NAME}
+    PRIVATE "-framework ApplicationServices" "-framework CoreFoundation" "-framework CoreGraphics"
   )
 endif()
 
@@ -53,23 +51,26 @@ if(UNIX AND NOT APPLE)
   target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE X11::X11 X11::Xrandr X11::Xi)
 endif()
 
-target_sources(${CMAKE_PROJECT_NAME} PRIVATE
-  src/plugin-main.cpp
-  src/viewport-border-overlay.cpp
-  src/viewport-border-overlay.hpp
-  src/viewport-border-state.cpp
-  src/viewport-border-state.hpp
-  src/wheel-zoom-state.cpp
-  src/wheel-zoom-state.hpp
-  src/zoominator-controller.cpp
-  src/zoominator-controller.hpp
-  src/zoominator-dialog.cpp
-  src/zoominator-dialog.hpp
+target_sources(
+  ${CMAKE_PROJECT_NAME}
+  PRIVATE
+    src/plugin-main.cpp
+    src/viewport-border-overlay.cpp
+    src/viewport-border-overlay.hpp
+    src/viewport-border-state.cpp
+    src/viewport-border-state.hpp
+    src/wheel-zoom-state.cpp
+    src/wheel-zoom-state.hpp
+    src/zoominator-controller.cpp
+    src/zoominator-controller.hpp
+    src/zoominator-dialog.cpp
+    src/zoominator-dialog.hpp
 )
 
 include(CTest)
 if(BUILD_TESTING)
-  add_executable(wheel-zoom-state-test
+  add_executable(
+    wheel-zoom-state-test
     tests/wheel-zoom-state-test.cpp
     src/viewport-border-state.cpp
     src/wheel-zoom-state.cpp

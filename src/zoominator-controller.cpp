@@ -3131,8 +3131,7 @@ void ZoominatorController::updateViewportBorderOverlay()
 
 	if (!viewportBorderOverlay)
 		viewportBorderOverlay = new ViewportBorderOverlay;
-	if (!viewportBorderOverlay->showViewport(QRect(left, top, right - left, bottom - top), 4,
-						 QColor(0, 220, 255),
+	if (!viewportBorderOverlay->showViewport(QRect(left, top, right - left, bottom - top), 4, QColor(0, 220, 255),
 						 allowViewportBorderWithIncompatibleCapture) &&
 	    !viewportBorderWarningLogged) {
 		viewportBorderWarningLogged = true;
