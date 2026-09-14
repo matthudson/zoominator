@@ -137,6 +137,8 @@ ZoominatorDialog::ZoominatorDialog(QWidget *parent) : QDialog(parent)
 	loadFromController();
 	connect(&ZoominatorController::instance(), &ZoominatorController::settingsChanged, this,
 		&ZoominatorDialog::updateWheelZoomStatus);
+	connect(&ZoominatorController::instance(), &ZoominatorController::settingsChanged, this,
+		&ZoominatorDialog::updateViewportGuideUi);
 }
 
 void ZoominatorDialog::closeEvent(QCloseEvent *event)
@@ -540,6 +542,10 @@ void ZoominatorDialog::buildUi()
 
 		chkShowViewportBorder = new QCheckBox(T("Dialog.ShowViewportBorder"), page);
 		chkShowViewportBorder->setToolTip(T("Dialog.ShowViewportBorderTooltip"));
+		chkAllowUnsafeViewportBorder = new QCheckBox(T("Dialog.AllowUnsafeViewportBorder"), page);
+		chkAllowUnsafeViewportBorder->setToolTip(T("Dialog.AllowUnsafeViewportBorderTooltip"));
+		lblViewportGuideStatus = new QLabel(page);
+		lblViewportGuideStatus->setWordWrap(true);
 		spViewportBorderZoomThreshold = new QDoubleSpinBox(page);
 		spViewportBorderZoomThreshold->setRange(1.0, 20.0);
 		spViewportBorderZoomThreshold->setSingleStep(0.1);
@@ -547,9 +553,12 @@ void ZoominatorDialog::buildUi()
 		spViewportBorderZoomThreshold->setSuffix(QStringLiteral("x"));
 		spViewportBorderZoomThreshold->setToolTip(T("Dialog.ViewportBorderZoomThresholdTooltip"));
 		lay->addWidget(chkShowViewportBorder);
+		lay->addWidget(lblViewportGuideStatus);
+		lay->addWidget(chkAllowUnsafeViewportBorder);
 		lay->addWidget(mkField(T("Dialog.ViewportBorderZoomThreshold"), spViewportBorderZoomThreshold));
-		connect(chkShowViewportBorder, &QCheckBox::toggled, spViewportBorderZoomThreshold,
-			&QWidget::setEnabled);
+		connect(chkShowViewportBorder, &QCheckBox::toggled, this, [this](bool) { updateViewportGuideUi(); });
+		connect(chkAllowUnsafeViewportBorder, &QCheckBox::toggled, this,
+			[this](bool) { updateViewportGuideUi(); });
 
 		addSection(lay, T("Dialog.Section.CursorHalo"));
 
@@ -868,8 +877,9 @@ void ZoominatorDialog::loadFromController()
 		chkShowMarkerWhenNotZoomed->setChecked(c.showMarkerWhenNotZoomed);
 		chkShowMarkerWhenNotZoomed->setEnabled(c.showCursorMarker);
 		chkShowViewportBorder->setChecked(c.showViewportBorder);
+		chkAllowUnsafeViewportBorder->setChecked(c.allowViewportBorderWithIncompatibleCapture);
 		spViewportBorderZoomThreshold->setValue(c.viewportBorderZoomThreshold);
-		spViewportBorderZoomThreshold->setEnabled(c.showViewportBorder);
+		updateViewportGuideUi();
 		spMarkerSize->setValue(c.markerSize);
 		spMarkerThickness->setValue(c.markerThickness);
 		updateMarkerColorButton(QColor::fromRgba(c.markerColor));
@@ -950,6 +960,7 @@ void ZoominatorDialog::applyToController()
 	c.showCursorMarker = chkShowCursorMarker->isChecked();
 	c.showMarkerWhenNotZoomed = chkShowMarkerWhenNotZoomed->isChecked();
 	c.showViewportBorder = chkShowViewportBorder->isChecked();
+	c.allowViewportBorderWithIncompatibleCapture = chkAllowUnsafeViewportBorder->isChecked();
 	c.viewportBorderZoomThreshold = spViewportBorderZoomThreshold->value();
 	c.markerOnlyOnClick = true;
 	c.markerSize = spMarkerSize->value();
@@ -1035,6 +1046,25 @@ void ZoominatorDialog::updateWheelZoomStatus()
 	else
 		status = T("Dialog.WheelZoom.Status.Ready");
 	lblWheelZoomStatus->setText(status);
+}
+
+void ZoominatorDialog::updateViewportGuideUi()
+{
+	if (!chkShowViewportBorder || !chkAllowUnsafeViewportBorder || !lblViewportGuideStatus)
+		return;
+	const bool enabled = chkShowViewportBorder->isChecked();
+	const bool compatible = ZoominatorController::instance().viewportBorderCaptureBackendSafe();
+	const bool overrideCapture = chkAllowUnsafeViewportBorder->isChecked();
+	spViewportBorderZoomThreshold->setEnabled(enabled);
+	chkAllowUnsafeViewportBorder->setEnabled(enabled && !compatible);
+	if (!enabled)
+		lblViewportGuideStatus->setText(T("Dialog.ViewportGuide.Status.Disabled"));
+	else if (compatible)
+		lblViewportGuideStatus->setText(T("Dialog.ViewportGuide.Status.Compatible"));
+	else if (overrideCapture)
+		lblViewportGuideStatus->setText(T("Dialog.ViewportGuide.Status.Override"));
+	else
+		lblViewportGuideStatus->setText(T("Dialog.ViewportGuide.Status.Incompatible"));
 }
 
 void ZoominatorDialog::updateMarkerColorButton(const QColor &color)

@@ -41,6 +41,7 @@ private:
 	void updateMarkerColorButton(const QColor &color);
 	void updateWheelZoomUi();
 	void updateWheelZoomStatus();
+	void updateViewportGuideUi();
 
 	static void obsSourceChanged(void *data, struct calldata *cd);
 
@@ -109,6 +110,8 @@ private:
 	QCheckBox *chkShowCursorMarker = nullptr;
 	QCheckBox *chkShowMarkerWhenNotZoomed = nullptr;
 	QCheckBox *chkShowViewportBorder = nullptr;
+	QCheckBox *chkAllowUnsafeViewportBorder = nullptr;
+	QLabel *lblViewportGuideStatus = nullptr;
 	QDoubleSpinBox *spViewportBorderZoomThreshold = nullptr;
 	QSpinBox *spMarkerSize = nullptr;
 	QSpinBox *spMarkerThickness = nullptr;

@@ -61,7 +61,9 @@ It operates at the **scene level**, meaning it works with any source automatical
   sits outside the viewport and uses Windows capture exclusion so it does not
   appear in the recording. The included Display Capture source must explicitly
   use Windows Graphics Capture; Automatic and DXGI Desktop Duplication capture
-  composed overlay windows, so Zoominator fails closed and hides the guide.
+  composed overlay windows. Zoominator explains this in its settings and hides
+  the guide by default, with an explicit show-anyway override for workflows
+  where capture leakage is acceptable.
 
 ---
 

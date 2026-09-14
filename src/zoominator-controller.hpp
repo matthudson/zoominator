@@ -65,6 +65,7 @@ public:
 	bool independentWheelZoomArmed() const;
 	bool independentWheelZoomBackendAvailable() const;
 	bool independentWheelZoomTargetAvailable() const;
+	bool viewportBorderCaptureBackendSafe() const;
 
 	QString screenKey;
 	QString hotkeySequence;
@@ -125,6 +126,7 @@ public:
 	bool showCursorMarker = false;
 	bool showMarkerWhenNotZoomed = false;
 	bool showViewportBorder = true;
+	bool allowViewportBorderWithIncompatibleCapture = false;
 	double viewportBorderZoomThreshold = 2.0;
 	bool markerOnlyOnClick = true;
 	uint32_t markerColor = 0xFFFF0000;
@@ -207,7 +209,6 @@ private:
 	void updateViewportBorderOverlay();
 	void queueViewportBorderOverlayUpdate();
 	void hideViewportBorderOverlay();
-	bool viewportBorderCaptureBackendSafe() const;
 
 	/* Split loop. Frame-critical work runs on OBS's graphics thread via
 	 * obs_add_tick_callback so the transform lands exactly once per rendered

@@ -719,6 +719,7 @@ void ZoominatorController::loadSettings()
 	showCursorMarker = false;
 	showMarkerWhenNotZoomed = false;
 	showViewportBorder = true;
+	allowViewportBorderWithIncompatibleCapture = false;
 	viewportBorderZoomThreshold = 2.0;
 	markerOnlyOnClick = true;
 	markerColor = 0xFFFF0000;
@@ -956,6 +957,9 @@ void ZoominatorController::loadSettings()
 		showMarkerWhenNotZoomed = obs_data_get_bool(data, "show_marker_when_not_zoomed");
 	if (obs_data_has_user_value(data, "show_viewport_border"))
 		showViewportBorder = obs_data_get_bool(data, "show_viewport_border");
+	if (obs_data_has_user_value(data, "allow_viewport_border_with_incompatible_capture"))
+		allowViewportBorderWithIncompatibleCapture =
+			obs_data_get_bool(data, "allow_viewport_border_with_incompatible_capture");
 	if (obs_data_has_user_value(data, "viewport_border_zoom_threshold"))
 		viewportBorderZoomThreshold = obs_data_get_double(data, "viewport_border_zoom_threshold");
 	viewportBorderZoomThreshold = clampd(viewportBorderZoomThreshold, 1.0, 20.0);
@@ -1075,6 +1079,8 @@ void ZoominatorController::saveSettings()
 	obs_data_set_bool(data, "show_cursor_marker", showCursorMarker);
 	obs_data_set_bool(data, "show_marker_when_not_zoomed", showMarkerWhenNotZoomed);
 	obs_data_set_bool(data, "show_viewport_border", showViewportBorder);
+	obs_data_set_bool(data, "allow_viewport_border_with_incompatible_capture",
+			  allowViewportBorderWithIncompatibleCapture);
 	obs_data_set_double(data, "viewport_border_zoom_threshold", viewportBorderZoomThreshold);
 	obs_data_set_bool(data, "marker_only_on_click", true);
 	obs_data_set_int(data, "marker_color", (long long)markerColor);
@@ -3086,7 +3092,7 @@ void ZoominatorController::updateViewportBorderOverlay()
 		viewportBorderBackendSafeCached = viewportBorderCaptureBackendSafe();
 		viewportBorderBackendLastCheckMs = nowMs;
 	}
-	if (!viewportBorderBackendSafeCached) {
+	if (!viewportBorderBackendSafeCached && !allowViewportBorderWithIncompatibleCapture) {
 		hideViewportBorderOverlay();
 		if (!viewportBorderBackendWarningLogged) {
 			viewportBorderBackendWarningLogged = true;
