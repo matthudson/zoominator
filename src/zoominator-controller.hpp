@@ -205,7 +205,9 @@ private:
 	int currentMarkerOpacity(qint64 nowMs);
 	void applyZoomToScene(double t);
 	void updateViewportBorderOverlay();
+	void queueViewportBorderOverlayUpdate();
 	void hideViewportBorderOverlay();
+	bool viewportBorderCaptureBackendSafe() const;
 
 	/* Split loop. Frame-critical work runs on OBS's graphics thread via
 	 * obs_add_tick_callback so the transform lands exactly once per rendered
@@ -243,12 +245,16 @@ private:
 	ViewportSnapshot viewportSnapshot;
 	ViewportBorderOverlay *viewportBorderOverlay = nullptr;
 	bool viewportBorderWarningLogged = false;
+	bool viewportBorderBackendWarningLogged = false;
+	bool viewportBorderBackendSafeCached = false;
+	qint64 viewportBorderBackendLastCheckMs = 0;
 	bool pendingMarkerVisible = false;
 	double pendingMarkerX = 0.0;
 	double pendingMarkerY = 0.0;
 	bool tickCallbackAdded = false;
 	std::atomic<bool> tickingWanted{false};
 	std::atomic<bool> pendingFinish{false};
+	std::atomic<bool> viewportBorderUpdateQueued{false};
 
 	QTimer tickTimer;
 	QTimer wheelEligibilityTimer;

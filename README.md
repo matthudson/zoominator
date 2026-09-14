@@ -59,7 +59,9 @@ It operates at the **scene level**, meaning it works with any source automatical
   Optionally outlines the part of the selected screen currently visible in
   OBS once zoom exceeds a configurable threshold. The click-through outline
   sits outside the viewport and uses Windows capture exclusion so it does not
-  appear in the recording. It stays hidden if capture exclusion is unavailable.
+  appear in the recording. The included Display Capture source must explicitly
+  use Windows Graphics Capture; Automatic and DXGI Desktop Duplication capture
+  composed overlay windows, so Zoominator fails closed and hides the guide.
 
 ---
 
@@ -120,7 +122,9 @@ cmake --build . --config Release
   the Advanced tab.
 - **Presenter viewport guide:** Supported on Windows 10 version 2004 and later,
   where `WDA_EXCLUDEFROMCAPTURE` can keep the guide out of display capture.
-  Other platforms currently leave the guide hidden.
+  Set each included Display Capture source's Capture Method to `Windows 10
+  (1903 and up)` (Windows Graphics Capture). The guide stays hidden with
+  Automatic/DXGI and on other platforms.
 - **Reset to default zoom:** Keyboard and mouse-button bindings are implemented
   on Windows. Linux/X11 and macOS keep this new binding disabled for now; their
   existing activation and legacy wheel behavior are unchanged.

@@ -2,6 +2,15 @@
 
 #include <cmath>
 
+bool viewportCaptureMethodExcludesWindows(int configuredMethod)
+{
+	/* OBS monitor capture values: 0 = Automatic, 1 = DXGI Desktop
+	 * Duplication, 2 = Windows Graphics Capture. Only an explicit WGC choice
+	 * gives us a reliable capture-exclusion contract. Automatic normally
+	 * resolves to DXGI and must therefore fail closed. */
+	return configuredMethod == 2;
+}
+
 ViewportBorderState computeViewportBorderState(double canvasWidth, double canvasHeight, double contentMinX,
 					       double contentMinY, double contentMaxX, double contentMaxY, double zoom,
 					       double focusX, double focusY, double anchorX, double anchorY,

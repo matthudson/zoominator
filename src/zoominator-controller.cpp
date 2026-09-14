@@ -1107,6 +1107,8 @@ void ZoominatorController::saveSettings()
 void ZoominatorController::rebuildRuntimeHooks()
 {
 	activeZoomFactor = zoomFactor;
+	viewportBorderBackendSafeCached = false;
+	viewportBorderBackendLastCheckMs = 0;
 	rebuildTriggersFromSettings();
 	uninstallHooks();
 	installHooks();
@@ -2880,6 +2882,7 @@ void ZoominatorController::applyZoomToScene(double t)
 		viewportSnapshot.right = viewport.right;
 		viewportSnapshot.bottom = viewport.bottom;
 	}
+	queueViewportBorderOverlayUpdate();
 
 	const qint64 nowApplyMs = nowMs;
 	const bool steadyFollow = zoomAnchor == ZoomAnchorMode::CursorFollow && followMouseRuntimeEnabled &&
@@ -3078,6 +3081,22 @@ void ZoominatorController::updateViewportBorderOverlay()
 		hideViewportBorderOverlay();
 		return;
 	}
+	const qint64 nowMs = QDateTime::currentMSecsSinceEpoch();
+	if (viewportBorderBackendLastCheckMs == 0 || nowMs - viewportBorderBackendLastCheckMs >= 250) {
+		viewportBorderBackendSafeCached = viewportBorderCaptureBackendSafe();
+		viewportBorderBackendLastCheckMs = nowMs;
+	}
+	if (!viewportBorderBackendSafeCached) {
+		hideViewportBorderOverlay();
+		if (!viewportBorderBackendWarningLogged) {
+			viewportBorderBackendWarningLogged = true;
+			blog(LOG_WARNING,
+			     "[Zoominator] Presenter viewport guide hidden because its included Display Capture "
+			     "source is not explicitly using Windows Graphics Capture. Automatic/DXGI capture "
+			     "does not honor window capture exclusion.");
+		}
+		return;
+	}
 
 	ViewportSnapshot snapshot;
 	{
@@ -3115,6 +3134,49 @@ void ZoominatorController::updateViewportBorderOverlay()
 	}
 #else
 	hideViewportBorderOverlay();
+#endif
+}
+
+void ZoominatorController::queueViewportBorderOverlayUpdate()
+{
+#ifdef _WIN32
+	if (!showViewportBorder)
+		return;
+	bool expected = false;
+	if (!viewportBorderUpdateQueued.compare_exchange_strong(expected, true, std::memory_order_acq_rel))
+		return;
+	QMetaObject::invokeMethod(
+		this,
+		[this]() {
+			viewportBorderUpdateQueued.store(false, std::memory_order_release);
+			updateViewportBorderOverlay();
+		},
+		Qt::QueuedConnection);
+#endif
+}
+
+bool ZoominatorController::viewportBorderCaptureBackendSafe() const
+{
+#ifdef _WIN32
+	std::vector<obs_sceneitem_t *> items;
+	enumerateTargetItemsInCurrentScene(items);
+	bool foundDisplayCapture = false;
+	for (obs_sceneitem_t *item : items) {
+		obs_source_t *source = item ? obs_sceneitem_get_source(item) : nullptr;
+		const char *id = source ? obs_source_get_id(source) : nullptr;
+		if (!id || QString::fromUtf8(id) != QLatin1String("monitor_capture"))
+			continue;
+		foundDisplayCapture = true;
+		obs_data_t *settings = obs_source_get_settings(source);
+		const int method = settings ? (int)obs_data_get_int(settings, "method") : 0;
+		if (settings)
+			obs_data_release(settings);
+		if (!viewportCaptureMethodExcludesWindows(method))
+			return false;
+	}
+	return foundDisplayCapture;
+#else
+	return false;
 #endif
 }
 
@@ -4619,6 +4681,8 @@ void ZoominatorController::requestIndependentWheelTargetRefresh()
 	 * let the existing main-thread eligibility timer perform the reset/refresh
 	 * after the scene transition has completed. */
 	independentWheelTargetReady.store(false, std::memory_order_release);
+	viewportBorderBackendSafeCached = false;
+	viewportBorderBackendLastCheckMs = 0;
 	pendingIndependentWheelDelta.store(0, std::memory_order_release);
 	independentWheelGeneration.fetch_add(1, std::memory_order_acq_rel);
 	independentWheelTargetRefreshRequested.store(true, std::memory_order_release);

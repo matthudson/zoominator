@@ -8,6 +8,8 @@ struct ViewportBorderState {
 	double bottom = 0.0;
 };
 
+bool viewportCaptureMethodExcludesWindows(int configuredMethod);
+
 ViewportBorderState computeViewportBorderState(double canvasWidth, double canvasHeight, double contentMinX,
 					       double contentMinY, double contentMaxX, double contentMaxY, double zoom,
 					       double focusX, double focusY, double anchorX, double anchorY,

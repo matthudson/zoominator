@@ -168,6 +168,13 @@ void testViewportBorderTracksInverseZoomTransform()
 		"3x edge-anchored viewport should cover one third of the screen");
 }
 
+void testViewportGuideRequiresExplicitWindowsGraphicsCapture()
+{
+	require(!viewportCaptureMethodExcludesWindows(0), "automatic capture must fail closed");
+	require(!viewportCaptureMethodExcludesWindows(1), "DXGI capture must fail closed");
+	require(viewportCaptureMethodExcludesWindows(2), "explicit Windows Graphics Capture should be accepted");
+}
+
 } // namespace
 
 int main()
@@ -181,6 +188,7 @@ int main()
 	testReconfigureClearsTransientState();
 	testTargetCurveAndBounds();
 	testViewportBorderTracksInverseZoomTransform();
+	testViewportGuideRequiresExplicitWindowsGraphicsCapture();
 	std::cout << "wheel zoom state tests passed\n";
 	return 0;
 }
