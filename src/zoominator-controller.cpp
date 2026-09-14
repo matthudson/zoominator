@@ -34,6 +34,8 @@
 #endif
 
 #include "zoominator-dialog.hpp"
+#include "viewport-border-overlay.hpp"
+#include "viewport-border-state.hpp"
 
 #ifdef __linux__
 #include <X11/Xlib.h>
@@ -643,6 +645,9 @@ void ZoominatorController::shutdown()
 		obs_source_release(staleRef);
 	if (dialog)
 		dialog->close();
+	hideViewportBorderOverlay();
+	delete viewportBorderOverlay;
+	viewportBorderOverlay = nullptr;
 }
 
 void ZoominatorController::showDialog()
@@ -703,6 +708,8 @@ void ZoominatorController::loadSettings()
 	portraitCover = true;
 	showCursorMarker = false;
 	showMarkerWhenNotZoomed = false;
+	showViewportBorder = true;
+	viewportBorderZoomThreshold = 2.0;
 	markerOnlyOnClick = true;
 	markerColor = 0xFFFF0000;
 	markerSize = 26;
@@ -920,6 +927,11 @@ void ZoominatorController::loadSettings()
 		showCursorMarker = obs_data_get_bool(data, "show_cursor_marker");
 	if (obs_data_has_user_value(data, "show_marker_when_not_zoomed"))
 		showMarkerWhenNotZoomed = obs_data_get_bool(data, "show_marker_when_not_zoomed");
+	if (obs_data_has_user_value(data, "show_viewport_border"))
+		showViewportBorder = obs_data_get_bool(data, "show_viewport_border");
+	if (obs_data_has_user_value(data, "viewport_border_zoom_threshold"))
+		viewportBorderZoomThreshold = obs_data_get_double(data, "viewport_border_zoom_threshold");
+	viewportBorderZoomThreshold = clampd(viewportBorderZoomThreshold, 1.0, 20.0);
 	// Continuous cursor tracking was inaccurate on captures whose aspect ratio
 	// differs from the OBS canvas. The marker is intentionally click-only.
 	markerOnlyOnClick = true;
@@ -1028,6 +1040,8 @@ void ZoominatorController::saveSettings()
 	obs_data_set_bool(data, "portrait_cover", portraitCover);
 	obs_data_set_bool(data, "show_cursor_marker", showCursorMarker);
 	obs_data_set_bool(data, "show_marker_when_not_zoomed", showMarkerWhenNotZoomed);
+	obs_data_set_bool(data, "show_viewport_border", showViewportBorder);
+	obs_data_set_double(data, "viewport_border_zoom_threshold", viewportBorderZoomThreshold);
 	obs_data_set_bool(data, "marker_only_on_click", true);
 	obs_data_set_int(data, "marker_color", (long long)markerColor);
 	obs_data_set_int(data, "marker_size", markerSize);
@@ -1061,6 +1075,7 @@ void ZoominatorController::rebuildRuntimeHooks()
 	rebuildTriggersFromSettings();
 	uninstallHooks();
 	installHooks();
+	updateViewportBorderOverlay();
 }
 
 void ZoominatorController::ensureTicking(bool on)
@@ -1132,7 +1147,9 @@ void ZoominatorController::resetState()
 		markerClickFlashHoldUntilMs = 0;
 		markerClickFlashFadeOutEndMs = 0;
 		markerClickHasPos = false;
+		viewportSnapshot = {};
 	}
+	hideViewportBorderOverlay();
 	obs_source_t *sceneSource = obs_frontend_get_current_scene();
 	if (sceneSource) {
 		obs_scene_t *scene = obs_scene_from_source(sceneSource);
@@ -2812,6 +2829,23 @@ void ZoominatorController::applyZoomToScene(double t)
 		offsetY = (minOffsetYClamped + maxOffsetYClamped) * 0.5;
 	}
 
+	const double screenMapMinX = centerCursorUntilEdge && sceneContentBoundsValid ? baseMinX : 0.0;
+	const double screenMapMinY = centerCursorUntilEdge && sceneContentBoundsValid ? baseMinY : 0.0;
+	const double screenMapMaxX = centerCursorUntilEdge && sceneContentBoundsValid ? baseMaxX : cw;
+	const double screenMapMaxY = centerCursorUntilEdge && sceneContentBoundsValid ? baseMaxY : ch;
+	const ViewportBorderState viewport = computeViewportBorderState(cw, ch, screenMapMinX, screenMapMinY,
+									screenMapMaxX, screenMapMaxY, z, fx, fy,
+									anchorX, anchorY, offsetX, offsetY);
+	{
+		std::lock_guard<std::mutex> lock(inputMutex);
+		viewportSnapshot.valid = viewport.valid;
+		viewportSnapshot.zoom = z;
+		viewportSnapshot.left = viewport.left;
+		viewportSnapshot.top = viewport.top;
+		viewportSnapshot.right = viewport.right;
+		viewportSnapshot.bottom = viewport.bottom;
+	}
+
 	const qint64 nowApplyMs = nowMs;
 	const bool steadyFollow = zoomAnchor == ZoomAnchorMode::CursorFollow && followMouseRuntimeEnabled &&
 				  !mouseTrackingIdle && animDir.load(std::memory_order_relaxed) == 0 && animT >= 0.999;
@@ -2884,6 +2918,8 @@ void ZoominatorController::applyZoomToScene(double t)
  * allowed to touch and publishes it. Deliberately does no animation work. */
 void ZoominatorController::onTick()
 {
+	updateViewportBorderOverlay();
+
 	if (pendingFinish.exchange(false)) {
 		finishZoomOnMainThread();
 		return;
@@ -2998,6 +3034,59 @@ void ZoominatorController::onTick()
 	/* Published last: the graphics thread may start reading sceneItems the
 	 * instant this lands, and by now it has a scene and a cursor sample. */
 	zoomActive.store(true, std::memory_order_release);
+}
+
+void ZoominatorController::updateViewportBorderOverlay()
+{
+#ifdef _WIN32
+	if (!showViewportBorder || !zoomActive.load(std::memory_order_acquire)) {
+		hideViewportBorderOverlay();
+		return;
+	}
+
+	ViewportSnapshot snapshot;
+	{
+		std::lock_guard<std::mutex> lock(inputMutex);
+		snapshot = viewportSnapshot;
+	}
+	if (!snapshot.valid || snapshot.zoom <= viewportBorderZoomThreshold) {
+		hideViewportBorderOverlay();
+		return;
+	}
+
+	int screenX = 0, screenY = 0, screenWidth = 0, screenHeight = 0;
+	if (!getSelectedScreenRect(screenX, screenY, screenWidth, screenHeight)) {
+		hideViewportBorderOverlay();
+		return;
+	}
+
+	const int left = qRound((double)screenX + snapshot.left * (double)screenWidth);
+	const int top = qRound((double)screenY + snapshot.top * (double)screenHeight);
+	const int right = qRound((double)screenX + snapshot.right * (double)screenWidth);
+	const int bottom = qRound((double)screenY + snapshot.bottom * (double)screenHeight);
+	if (right <= left || bottom <= top) {
+		hideViewportBorderOverlay();
+		return;
+	}
+
+	if (!viewportBorderOverlay)
+		viewportBorderOverlay = new ViewportBorderOverlay;
+	if (!viewportBorderOverlay->showViewport(QRect(left, top, right - left, bottom - top), 4,
+						 QColor(0, 220, 255)) &&
+	    !viewportBorderWarningLogged) {
+		viewportBorderWarningLogged = true;
+		blog(LOG_WARNING,
+		     "[Zoominator] Presenter viewport guide disabled because Windows capture exclusion is unavailable.");
+	}
+#else
+	hideViewportBorderOverlay();
+#endif
+}
+
+void ZoominatorController::hideViewportBorderOverlay()
+{
+	if (viewportBorderOverlay)
+		viewportBorderOverlay->hideViewport();
 }
 
 /* Graphics-thread half. Called once per rendered frame with the real frame

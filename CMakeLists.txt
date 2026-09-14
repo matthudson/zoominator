@@ -55,6 +55,10 @@ endif()
 
 target_sources(${CMAKE_PROJECT_NAME} PRIVATE
   src/plugin-main.cpp
+  src/viewport-border-overlay.cpp
+  src/viewport-border-overlay.hpp
+  src/viewport-border-state.cpp
+  src/viewport-border-state.hpp
   src/wheel-zoom-state.cpp
   src/wheel-zoom-state.hpp
   src/zoominator-controller.cpp
@@ -67,6 +71,7 @@ include(CTest)
 if(BUILD_TESTING)
   add_executable(wheel-zoom-state-test
     tests/wheel-zoom-state-test.cpp
+    src/viewport-border-state.cpp
     src/wheel-zoom-state.cpp
   )
   target_include_directories(wheel-zoom-state-test PRIVATE src)

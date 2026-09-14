@@ -48,6 +48,12 @@ It operates at the **scene level**, meaning it works with any source automatical
   without scrolling to reset. The plugin consumes wheel events during the
   gesture so the application below the pointer does not scroll.
 
+- **Presenter Viewport Guide (Windows)**
+  Optionally outlines the part of the selected screen currently visible in
+  OBS once zoom exceeds a configurable threshold. The click-through outline
+  sits outside the viewport and uses Windows capture exclusion so it does not
+  appear in the recording. It stays hidden if capture exclusion is unavailable.
+
 ---
 
 ## Installation
@@ -95,7 +101,7 @@ cmake --build . --config Release
 
 ## Compatibility Notes
 
-- **Windows:** Full support (global input, smooth tracking, independent wheel zoom, and legacy Mouse X2 + wheel zoom)
+- **Windows:** Full support (global input, smooth tracking, independent wheel zoom, presenter viewport guide, and legacy Mouse X2 + wheel zoom)
 - **macOS:** Requires Accessibility permissions for input tracking
 - **Linux (X11):** Supported via XInput2
 - **Independent wheel zoom:** Supported on Windows. The current X11 passive
@@ -105,6 +111,9 @@ cmake --build . --config Release
   to react. Legacy Mouse X2 wheel zoom remains supported on Windows and X11.
   Zoom-in/out sensitivity, limits, and animation durations are configured in
   the Advanced tab.
+- **Presenter viewport guide:** Supported on Windows 10 version 2004 and later,
+  where `WDA_EXCLUDEFROMCAPTURE` can keep the guide out of display capture.
+  Other platforms currently leave the guide hidden.
 - **Wayland:** Native sessions are detected and X11 hooks are disabled. The
   Global Shortcuts portal can support hotkeys, but Wayland currently has no
   standard passive global cursor-position portal, so full mouse tracking still

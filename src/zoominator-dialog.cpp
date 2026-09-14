@@ -489,6 +489,21 @@ void ZoominatorDialog::buildUi()
 		chkPortraitCover->setToolTip(T("Dialog.PortraitCoverTooltip"));
 		lay->addWidget(chkPortraitCover);
 
+		addSection(lay, T("Dialog.Section.ViewportGuide"));
+
+		chkShowViewportBorder = new QCheckBox(T("Dialog.ShowViewportBorder"), page);
+		chkShowViewportBorder->setToolTip(T("Dialog.ShowViewportBorderTooltip"));
+		spViewportBorderZoomThreshold = new QDoubleSpinBox(page);
+		spViewportBorderZoomThreshold->setRange(1.0, 20.0);
+		spViewportBorderZoomThreshold->setSingleStep(0.1);
+		spViewportBorderZoomThreshold->setDecimals(1);
+		spViewportBorderZoomThreshold->setSuffix(QStringLiteral("x"));
+		spViewportBorderZoomThreshold->setToolTip(T("Dialog.ViewportBorderZoomThresholdTooltip"));
+		lay->addWidget(chkShowViewportBorder);
+		lay->addWidget(mkField(T("Dialog.ViewportBorderZoomThreshold"), spViewportBorderZoomThreshold));
+		connect(chkShowViewportBorder, &QCheckBox::toggled, spViewportBorderZoomThreshold,
+			&QWidget::setEnabled);
+
 		addSection(lay, T("Dialog.Section.CursorHalo"));
 
 		chkShowCursorMarker = new QCheckBox(T("Dialog.ShowCursorHalo"), page);
@@ -791,6 +806,9 @@ void ZoominatorDialog::loadFromController()
 		chkShowCursorMarker->setChecked(c.showCursorMarker);
 		chkShowMarkerWhenNotZoomed->setChecked(c.showMarkerWhenNotZoomed);
 		chkShowMarkerWhenNotZoomed->setEnabled(c.showCursorMarker);
+		chkShowViewportBorder->setChecked(c.showViewportBorder);
+		spViewportBorderZoomThreshold->setValue(c.viewportBorderZoomThreshold);
+		spViewportBorderZoomThreshold->setEnabled(c.showViewportBorder);
 		spMarkerSize->setValue(c.markerSize);
 		spMarkerThickness->setValue(c.markerThickness);
 		updateMarkerColorButton(QColor::fromRgba(c.markerColor));
@@ -863,6 +881,8 @@ void ZoominatorDialog::applyToController()
 	c.portraitCover = chkPortraitCover->isChecked();
 	c.showCursorMarker = chkShowCursorMarker->isChecked();
 	c.showMarkerWhenNotZoomed = chkShowMarkerWhenNotZoomed->isChecked();
+	c.showViewportBorder = chkShowViewportBorder->isChecked();
+	c.viewportBorderZoomThreshold = spViewportBorderZoomThreshold->value();
 	c.markerOnlyOnClick = true;
 	c.markerSize = spMarkerSize->value();
 	c.markerThickness = spMarkerThickness->value();

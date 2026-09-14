@@ -31,6 +31,7 @@ struct _XDisplay;
 #endif
 
 class ZoominatorDialog;
+class ViewportBorderOverlay;
 
 class ZoominatorController final : public QObject {
 	Q_OBJECT
@@ -116,6 +117,8 @@ public:
 	bool portraitCover = true;
 	bool showCursorMarker = false;
 	bool showMarkerWhenNotZoomed = false;
+	bool showViewportBorder = true;
+	double viewportBorderZoomThreshold = 2.0;
 	bool markerOnlyOnClick = true;
 	uint32_t markerColor = 0xFFFF0000;
 	int markerSize = 26;
@@ -192,6 +195,8 @@ private:
 	bool isMarkerFlashActive(qint64 nowMs) const;
 	int currentMarkerOpacity(qint64 nowMs);
 	void applyZoomToScene(double t);
+	void updateViewportBorderOverlay();
+	void hideViewportBorderOverlay();
 
 	/* Split loop. Frame-critical work runs on OBS's graphics thread via
 	 * obs_add_tick_callback so the transform lands exactly once per rendered
@@ -213,11 +218,22 @@ private:
 		float sceneY = 0.0f;
 		obs_source_t *sceneRef = nullptr; /* strong ref owned by the snapshot */
 	};
+	struct ViewportSnapshot {
+		bool valid = false;
+		double zoom = 1.0;
+		double left = 0.0;
+		double top = 0.0;
+		double right = 0.0;
+		double bottom = 0.0;
+	};
 
 	/* Guards input, pending marker placement, and the captured click position
 	 * while the video thread calculates the halo's transformed position. */
 	std::mutex inputMutex;
 	InputSnapshot input;
+	ViewportSnapshot viewportSnapshot;
+	ViewportBorderOverlay *viewportBorderOverlay = nullptr;
+	bool viewportBorderWarningLogged = false;
 	bool pendingMarkerVisible = false;
 	double pendingMarkerX = 0.0;
 	double pendingMarkerY = 0.0;

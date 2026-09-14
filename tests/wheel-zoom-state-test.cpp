@@ -1,4 +1,5 @@
 #include "wheel-zoom-state.hpp"
+#include "viewport-border-state.hpp"
 
 #include <cstdlib>
 #include <cmath>
@@ -149,6 +150,24 @@ void testTargetCurveAndBounds()
 	require(std::fabs(target - 2.4) < 0.000001, "rapid direction changes must preserve signed additive steps");
 }
 
+void testViewportBorderTracksInverseZoomTransform()
+{
+	auto viewport = computeViewportBorderState(1920.0, 1080.0, 0.0, 0.0, 1920.0, 1080.0, 2.0, 960.0, 540.0, 960.0,
+						   540.0, 0.0, 0.0);
+	require(viewport.valid, "centered viewport should be valid");
+	require(std::fabs(viewport.left - 0.25) < 0.000001, "2x viewport should begin one quarter in");
+	require(std::fabs(viewport.top - 0.25) < 0.000001, "2x viewport should begin one quarter down");
+	require(std::fabs(viewport.right - 0.75) < 0.000001, "2x viewport should end three quarters in");
+	require(std::fabs(viewport.bottom - 0.75) < 0.000001, "2x viewport should end three quarters down");
+
+	viewport =
+		computeViewportBorderState(1920.0, 1080.0, 0.0, 0.0, 1920.0, 1080.0, 3.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
+	require(viewport.valid, "edge-anchored viewport should be valid");
+	require(std::fabs(viewport.left) < 0.000001, "edge-anchored viewport should retain its left edge");
+	require(std::fabs(viewport.right - (1.0 / 3.0)) < 0.000001,
+		"3x edge-anchored viewport should cover one third of the screen");
+}
+
 } // namespace
 
 int main()
@@ -161,6 +180,7 @@ int main()
 	testDeltaAccumulationAndReset();
 	testReconfigureClearsTransientState();
 	testTargetCurveAndBounds();
+	testViewportBorderTracksInverseZoomTransform();
 	std::cout << "wheel zoom state tests passed\n";
 	return 0;
 }
